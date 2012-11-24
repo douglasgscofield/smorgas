@@ -21,6 +21,6 @@ Currently underway or planned are:
 [fosmid pools]:    http://en.wikipedia.org/wiki/Fosmid
 [gametophyte]:     http://en.wikipedia.org/wiki/Gametophyte
 [yoruba]:          https://github.com/douglasgscofield/yoruba
-[yorubareadgroup]: https://github.com/douglasgscofield/riker/blob/master/README.md#addorreplacereadgroups
+[yorubareadgroup]: https://github.com/douglasgscofield/yoruba#readgroup
 [rikerdictionary]: https://github.com/douglasgscofield/riker/blob/master/README.md#createsequencedictionary
 

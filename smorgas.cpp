@@ -31,6 +31,7 @@ using namespace smorgas;
 
 static string       input_file;
 static string       output_file;
+static bool         opt_stdio = false;
 #ifdef _WITH_DEBUG
 static int32_t      opt_debug = 1;
 static int32_t      debug_progress = 100000;
@@ -99,11 +100,8 @@ smorgas::main_smorgas(int argc, char* argv[])
 
     //----------------- Command-line options
 
-    if( argc < 2 ) {
-        return usage();
-    }
-    
-    enum { OPT_input, OPT_output, OPT_opt1, OPT_opt2, OPT_opt3, OPT_opt4,
+    enum { OPT_input, OPT_output, OPT_stdio,
+        OPT_opt1, OPT_opt2, OPT_opt3, OPT_opt4,
 #ifdef _WITH_DEBUG
         OPT_debug, OPT_reads, OPT_progress,
 #endif
@@ -118,6 +116,7 @@ smorgas::main_smorgas(int argc, char* argv[])
         { OPT_input,         "--input",           SO_REQ_SEP },
         { OPT_output,        "-o",                SO_REQ_SEP },
         { OPT_output,        "--output",          SO_REQ_SEP },
+        { OPT_stdio,         "-",                 SO_NONE }, 
 #ifdef _WITH_DEBUG
         { OPT_debug,         "--debug",           SO_REQ_SEP },
         { OPT_reads,         "--reads",           SO_REQ_SEP },
@@ -141,6 +140,8 @@ smorgas::main_smorgas(int argc, char* argv[])
             input_file = args.OptionArg();
         } else if (args.OptionId() == OPT_output) {
             output_file = args.OptionArg();
+        } else if (args.OptionId() == OPT_stdio) {
+            opt_stdio = true;
 #ifdef _WITH_DEBUG
         } else if (args.OptionId() == OPT_debug) {
             opt_debug = args.OptionArg() ? atoi(args.OptionArg()) : opt_debug;
@@ -173,44 +174,37 @@ smorgas::main_smorgas(int argc, char* argv[])
 
     //-----------------
 
-    PileupParser  parser(input_file);
+
+    PileupParser  parser;
+    parser.min_base_quality = 66;
+    parser.open(input_file);
     parser.debug_level = 1;
 
     // TODO: multiple samples
     // we will eventually handle multiple samples, for now assume whole pile is
     // described in one set of call and quality (+ mapping quality) columns
+#define PRINT_UCHAR(__c__) __c__ << ":" << static_cast<uint16_t>(__c__)
 
     while (parser.read_line()) {
-
-        if (DEBUG(1)) {
-            cerr << "pileup input line " << parser.NL 
-                << " contains " << parser.NF << " fields" << endl
-                << "line: " << parser.line << endl;
-        }
-
-        parser.parse_line_lite();
-
-        if (DEBUG(1)) parser.pileup.print();
-
-        parser.parse_pile();
-
-        if (DEBUG(1)) parser.pileup.print();
-
-        if (DEBUG(1)) {
-            cerr << "reference: " << parser.pileup.ref
-                << " pos: " << parser.pileup.pos
-                << " refbase: " << parser.pileup.refbase
-                << " cov: " << parser.pileup.cov
-                << endl;
-        }
-        if (DEBUG(1)) {
-            cerr << "base_call: " << parser.fields[PileupParser::F_base_call]
-                << " base_q: " << parser.fields[PileupParser::F_base_q]
-                << " map_q: " << parser.fields[PileupParser::F_map_q]
-                << endl;
-        }
-        
+        parser.parse_line();
+        vector<uchar_t> map_q(parser.pileup.get_map_q());
+        uchar_t min_map_q = *min_element(map_q.begin(), map_q.end());
+        uchar_t max_map_q = *max_element(map_q.begin(), map_q.end());
+        cout << setw(8) << parser.NL << ":";
+        cout << " map_q=[" << uint16_t(min_map_q) << "," << uint16_t(max_map_q) << "]";
+        cout << " cov=" << parser.pileup.cov;
+        size_t n_map_max = 0; uchar_t high_map_q = 58;
+        for (size_t i = 0; i < map_q.size(); ++i) if (map_q[i] >= high_map_q) ++n_map_max;
+        cout << " cov_hiqh_q=" << n_map_max;
+        cout << " frac=" << (parser.pileup.cov ? (float(n_map_max) / parser.pileup.cov) : 0);
+        cout << endl;
     }
+
+    cout << "range base qual seen:\t" << PRINT_UCHAR(parser.min_base_quality_seen) << "\t" 
+        << PRINT_UCHAR(parser.max_base_quality_seen) << endl;
+    cout << "range map qual seen:\t" << PRINT_UCHAR(parser.min_map_quality_seen) << "\t"
+        << PRINT_UCHAR(parser.max_map_quality_seen) << endl;
+
 
     parser.close();
 

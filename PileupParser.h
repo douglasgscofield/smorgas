@@ -29,6 +29,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <limits>
 #include <algorithm>
 #include <ctype.h>
 
@@ -131,11 +132,13 @@ inline std::string toLower(const std::string &s) {
 }
 
 
-//--------------------- data structures
+//---------------------------------------------------------------
+//--------------------- Indel class
+
 
 class Indel {
 public:
-    Indel(const int32_t sz, const std::string sq, const size_t strat, const uchar_t mq);
+    Indel(const int32_t sz, const std::string& sq, const size_t strat = 0, const uchar_t mq = 0);
     Indel();
     ~Indel();
 
@@ -146,56 +149,74 @@ public:
     size_t      stratum;
     uchar_t     map_q;
 
-    void                 print(std::ostream& os = std::cerr) const;
+    void                 print(std::ostream& os = std::cerr, const std::string sep = " ") const;
     void                 print_compact(std::ostream& os = std::cerr) const;
-    const std::string&   seq_qualified() const;
+    const std::string    seq_qualified() const;
 
     friend std::ostream& operator<<(std::ostream& os, const Indel& indel);
 };
+
+
+//---------------------------------------------------------------
+//--------------------- Stratum class
+
 
 class Stratum {
 public:
     Stratum();
     ~Stratum();
 
-    uchar_t                base;
-    uchar_t                base_q;
-    uchar_t                map_q;
-    readdir_t              dir;
-    readstructure_t        read_str;  // TODO: infer read mapping quality from read structure
-    uchar_t                read_map_q;
-    const Indel*           indel;  // if there's an indel, this points to an element of pileup.indels[]
+    uchar_t                 base;
+    uchar_t                 base_q;
+    uchar_t                 map_q;
+    readdir_t               dir;
+    readstructure_t         read_str;  // TODO: infer read mapping quality from read structure
+    uchar_t                 read_map_q;
+    Indel*                  indel;  // if there's an indel, this points to an element of pileup.indels[]
 };
 typedef std::vector<Stratum> Pile;
+
+
+//---------------------------------------------------------------
+//--------------------- Pileup class
+
 
 class Pileup {  // one entry for each unique position
     // TODO: methods in PileupParser will walk this for analysis... better solution
     // might be to add a few methods here to assist?  or make a derived class that
     // adds those methods?
 public:
-    Pileup(uchar_t min_base_qual, uchar_t min_map_qual);
-    Pileup();
+    Pileup(uchar_t min_base_qual = '\0');
     ~Pileup();
 
-    std::string               ref;
-    size_t                    pos;
-    uchar_t                   refbase;  // TODO: can reference base be more than one character?
-    int32_t                   cov;
+    std::string             ref;
+    size_t                  pos;
+    uchar_t                 refbase;  // TODO: can reference base be more than one character?
+    int32_t                 cov;
     // TODO: multiple samples
-    Pile                      pile;  // the pile has 1+ strata TODO: is 0 ever true?
-    std::vector<Indel>        indels;  // less space to keep them here and not in Stratum
+    Pile                    pile;  // the pile has 1+ strata TODO: is 0 ever true?
+    std::vector<Indel>      indels;  // less space to keep them here and not in Stratum
 
     enum parsestate_t { PS_NONE=0x0, PS_lite=0x1, PS_pile=0x2, PS_all=0x3 };
-    parsestate_t              parse_state;
+    parsestate_t            parse_state;
 
     // TODO: allow different qualities for different samples
-    uchar_t     minimum_base_quality;
-    uchar_t     minimum_map_quality;
+    uchar_t                 min_set_base_quality;
+    uchar_t                 min_set_map_quality;
 
-    bool        apply_minimum_base_quality(uchar_t min_base_q);
-    bool        apply_minimum_map_quality(uchar_t min_map_q);
+    bool                    set_min_base_quality(uchar_t min_base_q);
+    bool                    set_min_map_quality(uchar_t min_map_q);
+    std::vector<uchar_t>    get_map_q(const size_t start = 0, size_t end = std::numeric_limits<std::size_t>::max());
 
     void        print(std::ostream& os = std::cerr) const;
+    void        print_pile(std::ostream& os = std::cerr, const size_t start = 0, size_t end = 0, 
+                           const std::string sep = "\t") const;
+    void        print_pile_stack(std::ostream& os = std::cerr,
+                           const size_t start = 0, size_t end = 0, const bool include_indels = false, 
+                           const std::string end_stack = "\n") const;
+    void        debug_print();
+    void        debug_print_pile(const size_t start = 0, size_t end = 0, bool stack = false);
+                               
     friend std::ostream& operator<<(std::ostream& os, const Pileup& pileup);
 
 };
@@ -220,8 +241,8 @@ public:
     const char          RS;      // input line separator
     size_t              NL;      // line number within pileup file
     int                 NF;      // number of fields in current line
-    uchar_t             minimum_base_quality;
-    uchar_t             minimum_map_quality;
+    uchar_t             min_base_quality;
+    uchar_t             min_map_quality;
 
 public:
 
@@ -234,36 +255,29 @@ public:
 
     Pileup                   pileup;
 
-    uchar_t     minimum_base_quality_character_seen;
-    uchar_t     maximum_base_quality_character_seen;
-    uchar_t     minimum_map_quality_character_seen;
-    uchar_t     maximum_map_quality_character_seen;
+    uchar_t     min_base_quality_seen;
+    uchar_t     max_base_quality_seen;
+    uchar_t     min_map_quality_seen;
+    uchar_t     max_map_quality_seen;
 
     // ctor, dtor
     PileupParser(const std::string& fname);
     PileupParser();
     ~PileupParser();
 
-    void     open(const std::string& fname);
-    void     close();
-    void     reset();
-    int      read_line();
-    void     parse_line();
-    void     parse_line_lite();
-    void     parse_pile();
+    void        open(const std::string& fname);
+    void        close();
+    int         read_line();
+    void        parse_line();
+    void        parse_line_lite();
+    void        parse_pile();
 
-    void     scan(size_t n_lines);
+    void        print(std::ostream& os = std::cerr) const;
+    void        print_lite(std::ostream& os = std::cerr, const std::string sep = "\t") const;
+    void        scan(size_t n_lines);
+    friend std::ostream& operator<<(std::ostream& os, const PileupParser& parser);
 
-    inline void update_qualities_seen(uchar_t bq, uchar_t mq) {
-        if (bq < minimum_base_quality_character_seen) 
-            minimum_base_quality_character_seen = bq;
-        else if (bq > maximum_base_quality_character_seen)
-            maximum_base_quality_character_seen = bq;
-        if (mq < minimum_map_quality_character_seen) 
-            minimum_map_quality_character_seen = mq;
-        else if (mq > maximum_map_quality_character_seen)
-            maximum_map_quality_character_seen = mq;
-    }
+    void        update_qualities_seen();
 
     int         debug_level;
     inline bool debug(int level) { return(debug_level >= level); }

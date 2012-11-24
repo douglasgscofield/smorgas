@@ -8,12 +8,14 @@
 //
 //
 // TODO
-// --- read pileup without indels
-// --- handle indels
+// -x- read pileup without indels
+// -x- handle indels
 // --- analyze high-quality coverage
 // --- raw heterozygosity
 // --- model-based heterozygosity
-// --- multiple pileup files
+// --- multiple BAMs in pileup input
+// --- check for unsorted input
+// --- solve read mapping quality from reads if separate column not available
 //
 
 #include "PileupParser.h"
@@ -29,9 +31,9 @@ namespace PileupTools {
 
 PileupParser::PileupParser(const std::string& fname)
     : filename(fname), FS('\t'), RS('\n'), NL(0), NF(0), 
-      minimum_base_quality(0), minimum_map_quality(0), line(""), fields(7),
-      minimum_base_quality_character_seen(0xff), maximum_base_quality_character_seen(0x00),
-      minimum_map_quality_character_seen(0xff), maximum_map_quality_character_seen(0x00),
+      min_base_quality(0), min_map_quality(33), line(""), fields(7),
+      min_base_quality_seen(0xff), max_base_quality_seen(0x00),
+      min_map_quality_seen(0xff), max_map_quality_seen(0x00),
       debug_level(0)
 {
     open(filename);
@@ -39,9 +41,9 @@ PileupParser::PileupParser(const std::string& fname)
 
 PileupParser::PileupParser()
     : filename(""), FS('\t'), RS('\n'), NL(0), NF(0), 
-      minimum_base_quality(0), minimum_map_quality(0), line(""), fields(7),
-      minimum_base_quality_character_seen(0xff), maximum_base_quality_character_seen(0x00),
-      minimum_map_quality_character_seen(0xff), maximum_map_quality_character_seen(0x00),
+      min_base_quality(0), min_map_quality(33), line(""), fields(7),
+      min_base_quality_seen(0xff), max_base_quality_seen(0x00),
+      min_map_quality_seen(0xff), max_map_quality_seen(0x00),
       debug_level(0)
 {
 }
@@ -128,6 +130,7 @@ PileupParser::parse_pile()
 
     Pile& pile = pileup.pile;
 
+    pile.clear();
     pile.resize(pileup.cov);
 
     size_t stratum = 0; // position within pile (in terms of strata)
@@ -136,8 +139,11 @@ PileupParser::parse_pile()
     while (i < fields[F_base_call].length()) {
 
         if (stratum == pile.size()) {
-            std::cerr << "needed to resize vector from " << pileup.cov << std::endl;
-            pile.resize(pileup.cov + int(pileup.cov / 2));
+            std::cerr << "NL=" << NL << " i=" << i <<" stratum=" << stratum 
+                << " RESIZING pile from " << pile.size();
+            pile.resize(pile.size() + 1);
+            //pile.resize(pileup.cov + int(pileup.cov / 2));
+            std::cerr << " to " << pile.size() << std::endl;
         }
 
         // Each base call entry can be one of several types.  
@@ -209,10 +215,10 @@ PileupParser::parse_pile()
 
             size_t j = i + 1, k = 0;  // start at '+' or '-', k will be first non-numeric char
             int32_t indel_size = extractNumber(fields[F_base_call], j, k);
-            Indel indel(indel_size, fields[F_base_call].substr(j, abs(indel_size)), stratum);
+            Indel indel(indel_size, fields[F_base_call].substr(k, abs(indel_size)), stratum);
             pileup.indels.push_back(indel);
             pile[stratum].indel = &pileup.indels.back();  // pointer to its new spot in indels stack
-            i = k - 1;
+            i = k + abs(indel_size) - 1;  // i now points to the last char of the indel sequence
 
         } else if (c1 == '$') {
 
@@ -222,24 +228,37 @@ PileupParser::parse_pile()
         }
 
         // after all that mess, the base and mapping quality columns are easy
-        pile[stratum].base_q = fields[F_base_q][stratum];
+        if (stratum < fields[F_base_q].size()) 
+            pile[stratum].base_q = fields[F_base_q][stratum];
+        else
+            std::cerr << "NL=" << NL << " stratum=" << stratum << " exceeds length of base_q" << std::endl;
+
         if (fields[F_map_q] != "") {
-            pile[stratum].map_q = fields[F_map_q][stratum];
+            if (stratum < fields[F_map_q].size()) 
+                pile[stratum].map_q = fields[F_map_q][stratum];
+            else
+                std::cerr << "NL=" << NL << " stratum=" << stratum << " exceeds length of map_q" << std::endl;
             if (pile[stratum].indel)
                 pile[stratum].indel->map_q = pile[stratum].map_q;
         }
 
         if (pile[stratum].read_map_q and pile[stratum].map_q
             and pile[stratum].map_q != pile[stratum].read_map_q)
-            std::cerr << "line " << NL << " stratum " << stratum << " read_map_q "
-                << pile[stratum].read_map_q << " != map_q " << pile[stratum].map_q 
-                << std::endl;
-
-        update_qualities_seen(pile[stratum].base_q, pile[stratum].map_q);
+            std::cerr << "NL=" << NL << " stratum=" << stratum << " read_map_q != map_q: "
+                << pile[stratum].read_map_q << " vs " << pile[stratum].map_q << std::endl;
 
         ++stratum;
         ++i;
     }
+
+    if (debug(2)) 
+        std::cerr << thisfunc << ": line " << NL << " has " << stratum << " strata" << std::endl;
+
+    update_qualities_seen();
+    if (min_base_quality) 
+        pileup.set_min_base_quality(min_base_quality);
+    if (min_map_quality) 
+        pileup.set_min_map_quality(min_map_quality);
 
     if (pile.size() != stratum) {
         std::cerr << "at end of parse_line, pile.size() " << pile.size() << " != stratum "
@@ -251,13 +270,12 @@ PileupParser::parse_pile()
 
     pileup.parse_state = static_cast<Pileup::parsestate_t>(pileup.parse_state | Pileup::PS_pile);
 
-    if (debug(1)) 
-        std::cerr << thisfunc << ": line " << NL << " has " << stratum << " strata" << std::endl;
     //assert(pile.size() == stratum);
 }
 
 
 //----------------- other stuff
+
 
 void
 PileupParser::scan(size_t n_lines)
@@ -267,71 +285,91 @@ PileupParser::scan(size_t n_lines)
 }
 
 
+void 
+PileupParser::update_qualities_seen()
+{
+    uchar_t prev_min_bq = min_base_quality_seen, prev_max_bq = max_base_quality_seen, 
+            prev_min_mq = min_map_quality_seen, prev_max_mq = max_map_quality_seen;
+    for (size_t i = 0; i < pileup.pile.size(); ++i) {
+        if (pileup.pile[i].base_q < min_base_quality_seen)
+            min_base_quality_seen = pileup.pile[i].base_q;
+        else if (pileup.pile[i].base_q > max_base_quality_seen)
+            max_base_quality_seen = pileup.pile[i].base_q;
+        if (pileup.pile[i].map_q < min_map_quality_seen)
+            min_map_quality_seen = pileup.pile[i].map_q;
+        else if (pileup.pile[i].map_q > max_map_quality_seen)
+            max_map_quality_seen = pileup.pile[i].map_q;
+    }
+    if (debug(2)) {
+        if (prev_min_bq > min_base_quality_seen)
+            std::cerr << "NL=" << NL << " min_base_quality_seen = " << min_base_quality_seen
+                << ":" << uint16_t(min_base_quality_seen) << std::endl;
+        if (prev_max_bq > max_base_quality_seen)
+            std::cerr << "NL=" << NL << " max_base_quality_seen = " << max_base_quality_seen
+                << ":" << uint16_t(max_base_quality_seen) << std::endl;
+        if (prev_min_mq > min_map_quality_seen)
+            std::cerr << "NL=" << NL << " min_map_quality_seen = " << min_map_quality_seen
+                << ":" << uint16_t(min_map_quality_seen) << std::endl;
+        if (prev_max_mq > max_map_quality_seen)
+            std::cerr << "NL=" << NL << " max_map_quality_seen = " << max_map_quality_seen
+                << ":" << uint16_t(max_map_quality_seen) << std::endl;
+    }
+}
+
+
+//----------------- printing
+
+
+void
+PileupParser::print(std::ostream& os) const
+{
+    os << (*this) << std::endl;
+}
+
+
+void
+PileupParser::print_lite(std::ostream& os, const std::string sep) const
+{
+    os << filename << sep << NL << ":" << NF;
+    for (size_t i = F_ref; i < F_END; ++i) os << sep << fields[i];
+    os << std::endl;
+}
+
+
+std::ostream& 
+operator<<(std::ostream&os, const PileupParser& parser)
+{
+    std::string sep(" ");
+    os << parser.filename << ":" << parser.NL << ":" << parser.line << std::endl;
+    os << parser.filename << ":" << parser.NL << ":NF=" << parser.NF;
+    for (size_t i = 0; i < parser.fields.size(); ++i) os << sep << i << "=" << parser.fields[i];
+    return(os);
+}
+
+
 //--------------------------------------------------------
 //--------------------------------- class Pileup
 
 
-Pileup::Pileup(uchar_t min_base_qual, uchar_t min_map_qual) 
+Pileup::Pileup(uchar_t min_base_qual) 
     : ref(""), pos(0), refbase('\0'), cov(-1), parse_state(PS_NONE), 
-      minimum_base_quality(min_base_qual), minimum_map_quality(min_map_qual)
-{
-}
-
-
-Pileup::Pileup() 
-    : ref(""), pos(0), refbase('\0'), cov(-1), parse_state(PS_NONE),
-      minimum_base_quality('\0'), minimum_map_quality('\0')
+      min_set_base_quality(min_base_qual), min_set_map_quality(33)
 {
 }
 
 
 Pileup::~Pileup()
 {
-    // when out of scope, we get automatic delete of unique_ptr<Pile> pile
-}
-   
-
-void 
-Pileup::print(std::ostream& os) const
-{
-    os << "PS=" << parse_state;
-    os << " ref=" << ref;
-    os << " pos=" << pos;
-    os << " refbase=" << refbase;
-    os << " cov=" << cov;
-    os << " min-base-q=" << minimum_base_quality;
-    os << " min-map-q=" << minimum_map_quality;
-    if (pile.size() == 0) {
-        os << " NO_PILE "; 
-    } else {
-        os << " base="; 
-        for (size_t i = 0; i < pile.size(); ++i) {
-            os << (pile[i].dir == RD_fwd ? pile[i].base : tolower(pile[i].base));
-            if (pile[i].indel) indel->print_compact(os);
-        }
-        os << " base_q="; for (size_t i = 0; i < pile.size(); ++i) os << pile[i].base_q;
-        os << " map_q="; for (size_t i = 0; i < pile.size(); ++i) os << pile[i].map_q;
-    }
-}
-
-
-std::ostream& operator<<(std::ostream&os, const Pileup& pileup)
-{
-    os << "pileup:";
-    pileup.print(os);
-    return(os);
 }
 
 
 bool 
-Pileup::apply_minimum_base_quality(uchar_t min_base_q)
+Pileup::set_min_base_quality(uchar_t min_base_q)
 {
     if (min_base_q == 0)
-        std::cerr << "pileup::apply_minimum_base_quality: argument is 0, so a no-op" << std::endl;
+        std::cerr << "pileup::set_min_base_quality: argument is 0, so a no-op" << std::endl;
     bool good_quals = true;
-    if (minimum_base_quality > 0)
-        std::cerr << "Pileup::apply_minimum_base_quality: minimum base quality already nonzero" << std::endl;
-    minimum_base_quality = min_base_q;
+    min_set_base_quality = min_base_q;
     for (size_t i = 0; i < pile.size(); ++i) {
         if (pile[i].base_q < min_base_q)
             good_quals = false;
@@ -342,14 +380,12 @@ Pileup::apply_minimum_base_quality(uchar_t min_base_q)
 
 
 bool 
-Pileup::apply_minimum_map_quality(uchar_t min_map_q)
+Pileup::set_min_map_quality(uchar_t min_map_q)
 {
     if (min_map_q == 0)
-        std::cerr << "pileup::apply_minimum_base_quality: argument is 0, so a no-op" << std::endl;
+        std::cerr << "pileup::set_min_base_quality: argument is 0, so a no-op" << std::endl;
     bool good_quals = true;
-    if (minimum_map_quality > 0)
-        std::cerr << "pileup::apply_minimum_base_quality: minimum map quality already nonzero" << std::endl;
-    minimum_map_quality = min_map_q;
+    min_set_map_quality = min_map_q;
     for (size_t i = 0; i < pile.size(); ++i) {
         if (pile[i].map_q < min_map_q or pile[i].read_map_q < min_map_q)
             good_quals = false;
@@ -357,6 +393,93 @@ Pileup::apply_minimum_map_quality(uchar_t min_map_q)
         pile[i].read_map_q -= min_map_q;
     }
     return good_quals;
+}
+
+
+std::vector<uchar_t>
+Pileup::get_map_q(const size_t start, size_t end)
+{
+    std::vector<uchar_t> ans(pile.size());
+    end = std::min(end, pile.size() - 1);
+    for (size_t i = start; i <= end; ++i) 
+        ans[i] = pile[i].map_q;
+    return ans;
+}
+   
+
+void 
+Pileup::print(std::ostream& os) const
+{
+    os << (*this) << std::endl;
+}
+
+
+void
+Pileup::print_pile(std::ostream& os, const size_t start, size_t end, const std::string sep) const
+{
+    if (pile.size() == 0) {
+        os << "NO_PILE"; 
+    } else {
+        print_pile_stack(os, start, end, true, sep);
+    }
+}
+
+
+void
+Pileup::print_pile_stack(std::ostream& os, const size_t start, size_t end, 
+                         const bool include_indels, const std::string end_stack) const
+{
+    if (pile.size() == 0) {
+        os << "NO_PILE" << end_stack; 
+    } else {
+        end = std::min(std::max(end, start), pile.size() - 1);
+        size_t i;
+        for (i = start; i <= end; ++i) {
+            os << static_cast<uchar_t>(pile[i].dir == RD_fwd ?  pile[i].base : tolower(pile[i].base));
+            if (include_indels && pile[i].indel)
+                pile[i].indel->print_compact(os);
+        }
+        os << end_stack;
+        for (i = start; i <= end; ++i) os << pile[i].base_q;
+        os << end_stack;
+        for (i = start; i <= end; ++i) os << pile[i].map_q;
+        os << end_stack;
+        os.flush();
+    }
+}
+
+
+void 
+Pileup::debug_print() 
+{ 
+    print(std::cerr);
+}
+
+
+void 
+Pileup::debug_print_pile(const size_t start, size_t end, bool stack)
+{
+    if (stack) print_pile_stack(std::cerr, start, end);
+    else print_pile(std::cerr, start, end);
+}
+         
+
+
+std::ostream& 
+operator<<(std::ostream& os, const Pileup& pileup)
+{
+    std::string sep(" ");
+    os << "pileup";
+    os << sep << "0x" << pileup.parse_state;
+    os << sep << pileup.ref;
+    os << sep << pileup.pos;
+    os << sep << pileup.refbase;
+    os << sep << pileup.cov;
+    //os << sep << "[b=" << (uint16_t)min_set_base_quality;
+    //os << ",m=" << (uint16_t)min_set_map_quality << "]";
+    os << sep;
+    pileup.print_pile(os, 0, pileup.pile.size() - 1, sep);
+    return(os);
 }
 
 
@@ -379,7 +502,7 @@ Stratum::~Stratum()
 //--------------------------------- class Indel
 
 
-Indel::Indel(const int32_t sz, const std::string& sq, const size_t strat = 0, const uchar_t mq = 0)
+Indel::Indel(const int32_t sz, const std::string& sq, const size_t strat, const uchar_t mq)
     : type(sz > 0 ? IN_ins : IN_del),
       dir(isBaseForward(sq[0]) ? RD_fwd : RD_rev),
       size(sz),
@@ -406,14 +529,24 @@ Indel::~Indel()
 }
 
 
-void
-Indel::print(std::ostream& os) const
+std::ostream& 
+operator<<(std::ostream&os, const Indel& indel)
 {
-    os << "(@" << stratum << " ";
-    if (type == IN_NONE)
+    std::string sep(" ");
+    os << "(@" << indel.stratum << sep;
+    if (indel.type == PileupTools::IN_NONE)
         os << "0)";
     else
-        os << (dir == RD_fwd ? "." : ",") << " " << size << " " << seq_qualified() << ")";
+        os << (indel.dir == PileupTools::RD_fwd ? "." : ",") << sep << indel.size 
+            << sep << indel.seq_qualified() << ")";
+    return(os);
+}
+
+
+void
+Indel::print(std::ostream& os, const std::string sep) const
+{
+    os << "indel" << (*this) << std::endl;
 }
 
 
@@ -427,20 +560,12 @@ Indel::print_compact(std::ostream& os) const
 }
 
 
-const std::string&
+const std::string
 Indel::seq_qualified() const
 {
-    std::ostreamstream qseq;
+    std::ostringstream qseq;
     qseq << (type > IN_ins ? "+" : "-") << (dir == RD_rev ? toLower(seq) : seq);
-    return(qseq.str())
-}
-
-
-std::ostream& operator<<(std::ostream&os, const Indel indel)
-{
-    os << "indel";
-    indel.print(os);
-    return(os);
+    return(qseq.str());
 }
 
 

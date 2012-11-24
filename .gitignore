@@ -19,3 +19,5 @@ README.html
 test
 test.*
 ?.pileup
+*.pile
+cmds

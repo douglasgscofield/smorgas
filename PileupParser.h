@@ -5,6 +5,17 @@
 // Some definitions that are used by the class are provided in the namespace
 // outside the class.
 //
+// TODO:
+// --- implement non-samtools -s dependent read qualities by maintaining a
+//     pile-high stack of current read mapping qualities from the base call
+//     ^q digraphs... a few questions here... easy to build up stack but when
+//     a read in the middle of the pile ends, do all overhead reads drop 
+//     down one read?  They must...
+// --- sort out namespace issues.  this is too messy as it is.
+// --- similarly sort out enum scoping and find best practices for providing
+//     types associated with a class... BamTools does a pretty darn nice job
+//     here but that is more complex than this class will ever get.
+//
 // Some terminology:
 // stratum:  the information describing a single read's contribution at a position; 
 //           this includes base or indel information along with quality and mapping

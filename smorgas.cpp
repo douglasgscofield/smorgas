@@ -16,6 +16,23 @@
 // --- multiple pileup files
 //
 
+// Std C/C++ includes
+#include <cstdlib>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+#include <vector>
+#include <string>
+#include <memory>
+#include <limits>
+#include <algorithm>
+#include <ctype.h>
+#include <stdint.h>
+
+// #define NDEBUG  // uncomment to remove assert() code
+#include <assert.h>
+
 #include "PileupParser.h"
 
 #include "SimpleOpt.h"
@@ -32,6 +49,8 @@ using namespace smorgas;
 static string       input_file;
 static string       output_file;
 static bool         opt_stdio = false;
+static bool         opt_mappingquality = false;
+static bool         opt_profile = false;
 #ifdef _WITH_DEBUG
 static int32_t      opt_debug = 1;
 static int32_t      debug_progress = 100000;
@@ -76,6 +95,8 @@ Options: -i FILE | --input FILE    input file name [default is stdin].  The\n\
                                    file name may also be specified on the\n\
                                    command line without this opiton.\n\
          -o FILE | --output FILE   output file name [default is stdout]\n\
+         --mapping-quality         per-position mapping quality summary, to stdout\n\
+         --profile                 convert to profile output for mlRho, to stdout\n\
          -? | --help               longer help\n\
 \n";
 #ifdef _WITH_DEBUG
@@ -101,14 +122,17 @@ smorgas::main_smorgas(int argc, char* argv[])
     //----------------- Command-line options
 
     enum { OPT_input, OPT_output, OPT_stdio,
-        OPT_opt1, OPT_opt2, OPT_opt3, OPT_opt4,
+        OPT_mappingquality,
+        OPT_profile,
+        OPT_opt2, OPT_opt3, OPT_opt4,
 #ifdef _WITH_DEBUG
         OPT_debug, OPT_reads, OPT_progress,
 #endif
         OPT_help };
 
     CSimpleOpt::SOption smorgas_options[] = {
-        { OPT_opt1,          "--opt1",         SO_NONE }, 
+        { OPT_mappingquality,  "--mapping-quality",  SO_NONE }, 
+        { OPT_profile,         "--profile",          SO_NONE }, 
         { OPT_opt2,          "--opt2",         SO_NONE }, 
         { OPT_opt3,          "--opt3",         SO_NONE }, 
         { OPT_opt4,          "--opt4",         SO_NONE }, 
@@ -142,6 +166,10 @@ smorgas::main_smorgas(int argc, char* argv[])
             output_file = args.OptionArg();
         } else if (args.OptionId() == OPT_stdio) {
             opt_stdio = true;
+        } else if (args.OptionId() == OPT_mappingquality) {
+            opt_mappingquality = true;
+        } else if (args.OptionId() == OPT_profile) {
+            opt_profile = true;
 #ifdef _WITH_DEBUG
         } else if (args.OptionId() == OPT_debug) {
             opt_debug = args.OptionArg() ? atoi(args.OptionArg()) : opt_debug;
@@ -175,9 +203,9 @@ smorgas::main_smorgas(int argc, char* argv[])
     //-----------------
 
 
-    PileupParser  parser;
+    PileupParser  parser(input_file);
     parser.min_base_quality = 66;
-    parser.open(input_file);
+    parser.min_map_quality = 33;
     parser.debug_level = 1;
 
     // TODO: multiple samples
@@ -185,25 +213,76 @@ smorgas::main_smorgas(int argc, char* argv[])
     // described in one set of call and quality (+ mapping quality) columns
 #define PRINT_UCHAR(__c__) __c__ << ":" << static_cast<uint16_t>(__c__)
 
-    while (parser.read_line()) {
-        parser.parse_line();
-        vector<uchar_t> map_q(parser.pileup.get_map_q());
-        uchar_t min_map_q = *min_element(map_q.begin(), map_q.end());
-        uchar_t max_map_q = *max_element(map_q.begin(), map_q.end());
-        cout << setw(8) << parser.NL << ":";
-        cout << " map_q=[" << uint16_t(min_map_q) << "," << uint16_t(max_map_q) << "]";
-        cout << " cov=" << parser.pileup.cov;
-        size_t n_map_max = 0; uchar_t high_map_q = 58;
-        for (size_t i = 0; i < map_q.size(); ++i) if (map_q[i] >= high_map_q) ++n_map_max;
-        cout << " cov_hiqh_q=" << n_map_max;
-        cout << " frac=" << (parser.pileup.cov ? (float(n_map_max) / parser.pileup.cov) : 0);
-        cout << endl;
+    // print out mapping quality, coverage, and high-quality coverage summary per position
+    if (0) {
+        while (parser.read_line()) {
+            parser.parse_line();
+            vector<uchar_t> map_q(parser.pileup.get_map_q());
+            uchar_t min_map_q = *min_element(map_q.begin(), map_q.end());
+            uchar_t max_map_q = *max_element(map_q.begin(), map_q.end());
+            cout << setw(8) << parser.NL << ":";
+            cout << " map_q=[" << uint16_t(min_map_q) << "," << uint16_t(max_map_q) << "]";
+            cout << " cov=" << parser.pileup.cov;
+            size_t n_map_max = 0; uchar_t high_map_q = 58;
+            for (size_t i = 0; i < map_q.size(); ++i) 
+                if (map_q[i] >= high_map_q) ++n_map_max;
+            cout << " cov_hiqh_q=" << n_map_max;
+            cout << " frac=" << (parser.pileup.cov ? (float(n_map_max) / parser.pileup.cov) : 0);
+            cout << endl;
+        }
     }
 
-    cout << "range base qual seen:\t" << PRINT_UCHAR(parser.min_base_quality_seen) << "\t" 
-        << PRINT_UCHAR(parser.max_base_quality_seen) << endl;
-    cout << "range map qual seen:\t" << PRINT_UCHAR(parser.min_map_quality_seen) << "\t"
-        << PRINT_UCHAR(parser.max_map_quality_seen) << endl;
+    // print per-position profile for mlRho
+    if (opt_profile) {
+        parser.debug_level = 0;
+        string current_reference = "";
+        while (parser.read_line()) {
+            parser.parse_line();
+            if (parser.pileup.ref != current_reference) {
+                // new reference
+                current_reference = parser.pileup.ref;
+                cout << ">" << current_reference << endl;
+            }
+            BaseCount bc = parser.pileup.base_count();
+            cout << parser.pileup.pos;
+            cout << tab << bc['A'] << tab << bc['C'] << tab << bc['G'] << tab << bc['T'] << endl;
+        }
+    }
+
+    // print per-position mapping quality summary
+    if (opt_mappingquality) {
+        parser.debug_level = 0;
+        cout << "#ref";
+        cout << tab << "pos";
+        cout << tab << "cov";
+        cout << tab << "mapq0";
+        cout << tab << "mapq60";
+        cout << endl;
+        while (parser.read_line()) {
+            parser.parse_line();
+            uchar_t mapq_a = 0; size_t mapq_a_count = 0;
+            uchar_t mapq_b = 60; size_t mapq_b_count = 0;
+            if (parser.pileup.cov > 0) {
+                for (Pile::const_iterator citer = parser.pileup.pile.begin();
+                    citer != parser.pileup.pile.end(); ++citer) {
+                    uchar_t mapq = citer->map_q - parser.min_map_quality;
+                    if (mapq == mapq_b) ++mapq_b_count;
+                    else if (mapq == mapq_a) ++mapq_a_count;
+                }
+            }
+            cout << parser.pileup.ref;
+            cout << tab << parser.pileup.pos;
+            cout << tab << parser.pileup.cov;
+            cout << tab << mapq_a_count;
+            cout << tab << mapq_b_count;
+            cout << endl;
+        }
+    }
+
+    //cout << "range base qual seen:\t" << PRINT_UCHAR(parser.min_base_quality_seen) << "\t" 
+    //    << PRINT_UCHAR(parser.max_base_quality_seen) << endl;
+    //cout << "range map qual seen:\t" << PRINT_UCHAR(parser.min_map_quality_seen) << "\t"
+    //    << PRINT_UCHAR(parser.max_map_quality_seen) << endl;
 
 
     parser.close();

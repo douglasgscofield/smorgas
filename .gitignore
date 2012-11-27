@@ -21,3 +21,6 @@ test.*
 ?.pileup
 *.pile
 cmds
+.RData
+.Rhistory
+hist.*

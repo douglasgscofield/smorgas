@@ -128,15 +128,18 @@ PileupParser::parse_pile()
 {
     const char* const thisfunc = "parse_pile";
 
+    pileup.reset_pile();
+
     Pile& pile = pileup.pile;
 
-    pile.clear();
     pile.resize(pileup.cov);
 
     size_t stratum = 0; // position within pile (in terms of strata)
     size_t i = 0; // position within base string, contains other info
 
     while (i < fields[F_base_call].length()) {
+
+        if (pileup.cov == 0) break;  // the base call column may still hold '*' so don't even go there
 
         if (stratum == pile.size()) {
             std::cerr << "NL=" << NL << " i=" << i <<" stratum=" << stratum 
@@ -255,10 +258,10 @@ PileupParser::parse_pile()
         std::cerr << thisfunc << ": line " << NL << " has " << stratum << " strata" << std::endl;
 
     update_qualities_seen();
-    if (min_base_quality) 
-        pileup.set_min_base_quality(min_base_quality);
-    if (min_map_quality) 
-        pileup.set_min_map_quality(min_map_quality);
+    //if (min_base_quality) 
+    //    pileup.set_min_base_quality(min_base_quality);
+    //if (min_map_quality) 
+    //    pileup.set_min_map_quality(min_map_quality);
 
     if (pile.size() != stratum) {
         std::cerr << "at end of parse_line, pile.size() " << pile.size() << " != stratum "
@@ -290,6 +293,7 @@ PileupParser::update_qualities_seen()
 {
     uchar_t prev_min_bq = min_base_quality_seen, prev_max_bq = max_base_quality_seen, 
             prev_min_mq = min_map_quality_seen, prev_max_mq = max_map_quality_seen;
+    if (pileup.cov == 0) return;
     for (size_t i = 0; i < pileup.pile.size(); ++i) {
         if (pileup.pile[i].base_q < min_base_quality_seen)
             min_base_quality_seen = pileup.pile[i].base_q;
@@ -350,16 +354,44 @@ operator<<(std::ostream&os, const PileupParser& parser)
 //--------------------------------------------------------
 //--------------------------------- class Pileup
 
+// Describes one position in the pileup
+//
+// ref         : reference sequence name (TODO: make more space-efficient)
+// pos         : base position within reference sequence (1-bases)
+// cov         : coverage as reported in the pileup (-1 is not set)
+// pile        : vector of Stratum, describing each read contribution
+// indels      : vector of Indel, describing each declared indel 
+// parse_state : PS_NONE, PS_lite, PS_pile, PS_all (== PS_lite | PS_pile),
+//               tells when the line has been read and the pileup has been
+//               parsed
+// min_set_base_quality : set by user
+// min_set_map_quality  : set by user, defaults to samtools +33
 
 Pileup::Pileup(uchar_t min_base_qual) 
     : ref(""), pos(0), refbase('\0'), cov(-1), parse_state(PS_NONE), 
       min_set_base_quality(min_base_qual), min_set_map_quality(33)
-{
-}
+{ }
 
 
 Pileup::~Pileup()
+{ }
+
+
+void
+Pileup::reset_pile()
 {
+    pile.clear();
+    indels.clear();
+}
+
+
+BaseCount
+Pileup::base_count()
+{
+    BaseCount ans;
+    for (Pile::const_iterator citer = pile.begin(); citer != pile.end(); ++citer)
+        ++ans[citer->base];
+    return(ans);
 }
 
 
@@ -370,10 +402,10 @@ Pileup::set_min_base_quality(uchar_t min_base_q)
         std::cerr << "pileup::set_min_base_quality: argument is 0, so a no-op" << std::endl;
     bool good_quals = true;
     min_set_base_quality = min_base_q;
-    for (size_t i = 0; i < pile.size(); ++i) {
-        if (pile[i].base_q < min_base_q)
+    for (Pile::iterator iter = pile.begin(); iter != pile.end(); ++iter) {
+        if (iter->base_q < min_base_q)
             good_quals = false;
-        pile[i].base_q -= min_base_q;
+        iter->base_q -= min_base_q;
     }
     return good_quals;
 }
@@ -386,11 +418,12 @@ Pileup::set_min_map_quality(uchar_t min_map_q)
         std::cerr << "pileup::set_min_base_quality: argument is 0, so a no-op" << std::endl;
     bool good_quals = true;
     min_set_map_quality = min_map_q;
-    for (size_t i = 0; i < pile.size(); ++i) {
-        if (pile[i].map_q < min_map_q or pile[i].read_map_q < min_map_q)
+    for (Pile::iterator iter = pile.begin(); iter != pile.end(); ++iter) {
+        if (iter->map_q < min_map_q or iter->read_map_q < min_map_q)
             good_quals = false;
-        pile[i].map_q -= min_map_q;
-        pile[i].read_map_q -= min_map_q;
+        iter->map_q -= min_map_q;
+        if (iter->read_map_q) 
+            iter->read_map_q -= min_map_q;
     }
     return good_quals;
 }
@@ -486,21 +519,40 @@ operator<<(std::ostream& os, const Pileup& pileup)
 //--------------------------------------------------------
 //--------------------------------- class Stratum
 
+// One stratum per read per position
+//
+// base        : the base declared in this stratum
+// base_q      : base quality, scale must be set by user (TODO: guess quality, tell user if they're wrong)
+// map_q       : mapping quality, samtools convention is Phred+33s (TODO: guess quality, & other mappers?)
+// dir         : RD_NONE, RD_fwd, RD_rev (enum typedef in PileupTools namespace)
+// read_str    : read structure, RS_NONE, RS_start, RS_end, RS_gap (enum typedef in PileupTools namespace)
+// read_map_q  : mapping quality, samtools convention is Phred+33s (TODO: other mappers?)
+// indel       : pointer to class Indel instance if there's an indel declared here
 
 Stratum::Stratum() 
     : base('\0'), base_q('\0'), map_q('\0'), dir(RD_NONE), read_str(RS_NONE),
       read_map_q('\0'), indel(0)
-{
-}
+{ }
 
 Stratum::~Stratum()
-{
-}
+{ }
 
 
 //--------------------------------------------------------
 //--------------------------------- class Indel
 
+// If an indel is declared, an instance of this holds it.  These are
+// managed in a vector held in a Pileup, and individual instances of
+// Stratum point to the entry in this vector.
+//
+// type     : IN_NONE, IN_ins, IN_del (enum typedef in PileupTools namespace)
+// dir      : RD_NONE, RD_fwd, RD_rev (enum typedef in PileupTools namespace)
+// size     : signed, with + = insertion, - = deletion (yes, the sign is redundant to type)
+// seq      : the uppercase sequence of the indel
+// stratum  : the read stratum in which the Indel was declared
+// map_q    : mapping quality of the read declaring the indel
+//
+// TODO: anything else to note for an indel?
 
 Indel::Indel(const int32_t sz, const std::string& sq, const size_t strat, const uchar_t mq)
     : type(sz > 0 ? IN_ins : IN_del),
@@ -509,24 +561,16 @@ Indel::Indel(const int32_t sz, const std::string& sq, const size_t strat, const 
       seq(dir == RD_fwd ? sq : toUpper(sq)),
       stratum(strat),
       map_q(mq)
-{
-    // all the business is taken care of with initializers
-    // sz: signed, with + = insertion, - = deletion
-    // sq: case-sensitive, with upper = forward-direction, lower = reverse-direction
-    // strat: the stratum to which this indel belongs
-    // TODO: maybe we want to add base qualities and mapping quality of the read?
-}
+{ }
 
 
 Indel::Indel()
     : type(IN_NONE), dir(RD_NONE), size(0), seq(""), stratum(0), map_q(0)
-{
-}
+{ }
 
 
 Indel::~Indel()
-{
-}
+{ }
 
 
 std::ostream& 
@@ -535,7 +579,7 @@ operator<<(std::ostream&os, const Indel& indel)
     std::string sep(" ");
     os << "(@" << indel.stratum << sep;
     if (indel.type == PileupTools::IN_NONE)
-        os << "0)";
+        os << "0!!!)";
     else
         os << (indel.dir == PileupTools::RD_fwd ? "." : ",") << sep << indel.size 
             << sep << indel.seq_qualified() << ")";

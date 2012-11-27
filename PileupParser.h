@@ -26,12 +26,14 @@
 #include <fstream>
 #include <sstream>
 #include <iomanip>
+#include <map>
 #include <vector>
 #include <string>
 #include <memory>
 #include <limits>
 #include <algorithm>
 #include <ctype.h>
+#include <stdint.h>
 
 // #define NDEBUG  // uncomment to remove assert() code
 #include <assert.h>
@@ -40,12 +42,20 @@ namespace PileupTools {
 
 //--------------------- types and type-related utilities
 
+// for representing bases
+//
 typedef unsigned char uchar_t;
 
 inline uchar_t toUchar(int x) {
     return static_cast<uchar_t>(x);
 }
 
+// for representing base counts
+//
+typedef std::map<uchar_t, size_t> BaseCount;
+
+// enums for pileup features
+//
 enum readdir_t       { RD_NONE, RD_fwd, RD_rev };
 enum readstructure_t { RS_NONE, RS_start, RS_end, RS_gap };
 enum indel_t         { IN_NONE, IN_ins, IN_del };
@@ -207,6 +217,9 @@ public:
     bool                    set_min_base_quality(uchar_t min_base_q);
     bool                    set_min_map_quality(uchar_t min_map_q);
     std::vector<uchar_t>    get_map_q(const size_t start = 0, size_t end = std::numeric_limits<std::size_t>::max());
+
+    void                    reset_pile();
+    BaseCount               base_count();
 
     void        print(std::ostream& os = std::cerr) const;
     void        print_pile(std::ostream& os = std::cerr, const size_t start = 0, size_t end = 0, 

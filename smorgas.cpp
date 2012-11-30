@@ -8,9 +8,10 @@
 //
 //
 // TODO
-// --- read pileup without indels
-// --- handle indels
-// --- analyze high-quality coverage
+// -x- read pileup without indels
+// -x- handle indels
+// -x- produce --mapping-quality report
+// -x- produce --profile output
 // --- raw heterozygosity
 // --- model-based heterozygosity
 // --- multiple pileup files

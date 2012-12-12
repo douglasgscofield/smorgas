@@ -214,6 +214,9 @@ public:
     size_t                  pos;
     uchar_t                 refbase;  // TODO: can reference base be more than one character?
     int32_t                 cov;
+    const std::string *     raw_base_call;
+    const std::string *     raw_base_quality;
+    const std::string *     raw_map_quality;  // only set if -s flag passed to samtools
     // TODO: multiple samples
     Pile                    pile;  // the pile has 1+ strata TODO: is 0 ever true?
     std::vector<Indel>      indels;  // less space to keep them here and not in Stratum

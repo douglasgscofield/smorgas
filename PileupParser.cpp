@@ -10,12 +10,47 @@
 // TODO
 // -x- read pileup without indels
 // -x- handle indels
+// --- base qualities (base 64) can be < 64 in vicinity of N, and ! (33) when the reference is N
+/* 
+MA_1    1098    A       15      ,,,,,,,,,,,,,,. \\\\\\Z\\\\\Y\\
+MA_1    1099    T       15      ,,,,,,,,,,,,,,. aaaaaa`aaaa^Taa
+MA_1    1100    T       15      ,,,,,,,,,,,,,,. aaaa_aYaaaaTYaa
+MA_1    1101    G       15      ,,,,,,,,,,,,,,. \\\\\\\\\\\\\\\
+MA_1    1102    G       15      ,,,,,,,,,,,,,,. ZZZZZZZZZZZZZZZ
+MA_1    1103    G       15      ,,,,,,,,,,,,,,. ZZZZZZZZZZZZZZZ
+MA_1    1104    G       15      ,,,,,,,,,,,,,,. YYYYY\Y[YYYYYY\
+MA_1    1105    T       15      ,,,,,,,,,,,,,,. ?????>?>???????
+MA_1    1106    T       15      ,,,,,,,,$,,,,,,.        <<<<<;<;<<<<<<<
+MA_1    1107    T       14      ,-2nn,-2nn,-2nn,-2nn,-2nn,$,-2nn,-2nn,-2nn,-2nn,-2nn,-2nn,-2nn. :::::9::::::::
+MA_1    1108    N       13      ************G   !!!!!!!!!!!!9
+MA_1    1109    N       13      ************G   !!!!!!!!!!!!8
+MA_1    1110    N       13      ggggggggggggA$  !!!!!!!!!!!!7
+MA_1    1111    N       12      gggggggggggg    !!!!!!!!!!!!
+MA_1    1112    N       12      aaaaaaaaaaaa    !!!!!!!!!!!!
+MA_1    1113    N       12      aaaaaaaaaaaa    !!!!!!!!!!!!
+MA_1    1114    N       12      c$c$c$c$c$c$c$c$c$c$c$c$        !!!!!!!!!!!!
+MA_1    1904    N       1       ^Fa     5
+MA_1    1905    N       1       t       5
+MA_1    1906    N       1       g       6
+MA_1    1907    N       4       ^3t^1t^3tt      7776
+MA_1    1908    N       5       ^3ggggg 87777
+MA_1    1909    N       6       aaaa^3aa        888898
+MA_1    1910    N       7       cccccc^FC       999999;
+MA_1    1911    N       7       ggggggG ;;;;;;;
+MA_1    1912    G       14      ,^>.^6.,^0.,,,^>.^6.^6.^>.,.    >>>>>>>>>>>>>>
+MA_1    1913    T       15      ,..,.,,,....^8.,.       HHHHHHHHHHHHBHH
+*/
 // --- analyze high-quality coverage
 // --- raw heterozygosity
 // --- model-based heterozygosity
-// --- multiple BAMs in pileup input
+// --- multiple BAMs in pileup input; handle with stack that parallels the strata
+//     and indicates which BAM in sequence they came from... or maybe keep track
+//     only of intervals that give us slices from which to take raw and parsed
+//     data
 // --- check for unsorted input
-// --- solve read mapping quality from reads if separate column not available
+// --- solve read mapping quality from reads if separate column not available;
+//     handle with stack that parallels the strata and tracks read quality for
+//     each stratum as reads are introduced and removed
 //
 
 #include "PileupParser.h"
@@ -78,7 +113,7 @@ PileupParser::read_line()
         if (debug(2)) std::cerr << "line " << NL << " :" << line << ":" << std::endl;
         // process line fields
         size_t pos = 0, f;
-        for (f = 0; f < F_END; ++f) {
+        for (f = 0; f < F_END; ++f) {  // TODO: handle multiple BAMs here
             size_t t = line.find(FS, pos);
             if (t != std::string::npos) {
                 fields[f] = line.substr(pos, t - pos);
@@ -107,6 +142,12 @@ PileupParser::parse_line()
     // here, parse_state will be (PS_lite | PS_pile) == PS_all
 }
 
+// parse_line_lite() should do a cursory parse of the fields and load access to them
+// into the pileup object.  If there are multiple BAMs in the pileup, then here is
+// where the columns should be joined and the masks that allow methods to extract info
+// for each BAM are generated; the final format here for base call, base quality and
+// mapping quality (if supplied), though, is a single string for each.
+
 void
 PileupParser::parse_line_lite()
 {
@@ -119,7 +160,10 @@ PileupParser::parse_line_lite()
     pileup.pos = atol(fields[F_pos].c_str());
     pileup.refbase = fields[F_refbase][0];
     pileup.cov = atol(fields[F_cov].c_str());
-    pileup.parse_state = static_cast<Pileup::parsestate_t>(pileup.parse_state | Pileup::PS_lite);
+    pileup.raw_base_call = &fields[F_base_call];
+    pileup.raw_base_quality = &fields[F_base_q];
+    pileup.raw_map_quality = &fields[F_map_q];
+    pileup.parse_state = Pileup::PS_lite;
     // do not do parse_pile() here
 }
 
@@ -128,7 +172,7 @@ PileupParser::parse_pile()
 {
     const char* const thisfunc = "parse_pile";
 
-    pileup.reset_pile();
+    pileup.reset_pile();  // does not affect anything done by parse_line_lite()
 
     Pile& pile = pileup.pile;
 
@@ -137,7 +181,7 @@ PileupParser::parse_pile()
     size_t stratum = 0; // position within pile (in terms of strata)
     size_t i = 0; // position within base string, contains other info
 
-    while (i < fields[F_base_call].length()) {
+    while (i < pileup.raw_base_call->length()) {
 
         if (pileup.cov == 0) break;  // the base call column may still hold '*' so don't even go there
 
@@ -171,14 +215,14 @@ PileupParser::parse_pile()
         // *         : position is a continuation of a deletion in the read at this stratum
         //
 
-        uchar_t c0 = fields[F_base_call][i];
+        uchar_t c0 = (*pileup.raw_base_call)[i];
 
         if (c0 == '^') {  // if read start, eat it and move to next character
 
             pile[stratum].read_str = RS_start;
-            pile[stratum].read_map_q = fields[F_base_call][i + 1];
+            pile[stratum].read_map_q = (*pileup.raw_base_call)[i + 1];
             i += 2;
-            c0 = fields[F_base_call][i];
+            c0 = (*pileup.raw_base_call)[i];
 
         }
 
@@ -209,7 +253,7 @@ PileupParser::parse_pile()
                 break;
         }
 
-        uchar_t c1 = lookAhead(fields[F_base_call], (i + 1));  // returns next char or 0 if end of string
+        uchar_t c1 = lookAhead((*pileup.raw_base_call), (i + 1));  // returns next char or 0 if end of string
 
         if (isIndel(c1)) {   // [+-]#+[Bb]+
 
@@ -217,8 +261,8 @@ PileupParser::parse_pile()
             // eat [+-]#+ for indel size, then use abs(indel size) to eat the sequence
 
             size_t j = i + 1, k = 0;  // start at '+' or '-', k will be first non-numeric char
-            int32_t indel_size = extractNumber(fields[F_base_call], j, k);
-            Indel indel(indel_size, fields[F_base_call].substr(k, abs(indel_size)), stratum);
+            int32_t indel_size = extractNumber((*pileup.raw_base_call), j, k);
+            Indel indel(indel_size, pileup.raw_base_call->substr(k, abs(indel_size)), stratum);
             pileup.indels.push_back(indel);
             pile[stratum].indel = &pileup.indels.back();  // pointer to its new spot in indels stack
             i = k + abs(indel_size) - 1;  // i now points to the last char of the indel sequence
@@ -231,14 +275,14 @@ PileupParser::parse_pile()
         }
 
         // after all that mess, the base and mapping quality columns are easy
-        if (stratum < fields[F_base_q].size()) 
-            pile[stratum].base_q = fields[F_base_q][stratum];
+        if (stratum < pileup.raw_base_quality->size()) 
+            pile[stratum].base_q = (*pileup.raw_base_quality)[stratum];
         else
             std::cerr << "NL=" << NL << " stratum=" << stratum << " exceeds length of base_q" << std::endl;
 
-        if (fields[F_map_q] != "") {
-            if (stratum < fields[F_map_q].size()) 
-                pile[stratum].map_q = fields[F_map_q][stratum];
+        if ((*pileup.raw_map_quality) != "") {
+            if (stratum < pileup.raw_map_quality->size()) 
+                pile[stratum].map_q = (*pileup.raw_map_quality)[stratum];
             else
                 std::cerr << "NL=" << NL << " stratum=" << stratum << " exceeds length of map_q" << std::endl;
             if (pile[stratum].indel)
@@ -356,19 +400,24 @@ operator<<(std::ostream&os, const PileupParser& parser)
 
 // Describes one position in the pileup
 //
-// ref         : reference sequence name (TODO: make more space-efficient)
-// pos         : base position within reference sequence (1-bases)
-// cov         : coverage as reported in the pileup (-1 is not set)
-// pile        : vector of Stratum, describing each read contribution
-// indels      : vector of Indel, describing each declared indel 
-// parse_state : PS_NONE, PS_lite, PS_pile, PS_all (== PS_lite | PS_pile),
-//               tells when the line has been read and the pileup has been
-//               parsed
+// ref              : reference sequence name (TODO: make more space-efficient)
+// pos              : base position within reference sequence (1-bases)
+// cov              : coverage as reported in the pileup (-1 is not set)
+// raw_base_call    : pointer to *unparsed* fields[4] member for base calls
+// raw_base_quality : pointer to *unparsed* fields[5] member for base quality
+// raw_map_quality  : pointer to *unparsed* fields[6] member for mapping quality
+// pile             : vector of Stratum, describing each read contribution
+// indels           : vector of Indel, describing each declared indel 
+// parse_state      : PS_NONE, PS_lite, PS_pile, PS_all (== PS_lite | PS_pile),
+//                    tells when the line has been read and the pileup has been
+//                    parsed
 // min_set_base_quality : set by user
 // min_set_map_quality  : set by user, defaults to samtools +33
 
 Pileup::Pileup(uchar_t min_base_qual) 
-    : ref(""), pos(0), refbase('\0'), cov(-1), parse_state(PS_NONE), 
+    : ref(""), pos(0), refbase('\0'), cov(-1), 
+      raw_base_call(0), raw_base_quality(0), raw_map_quality(0),
+      parse_state(PS_NONE), 
       min_set_base_quality(min_base_qual), min_set_map_quality(33)
 { }
 
@@ -380,6 +429,7 @@ Pileup::~Pileup()
 void
 Pileup::reset_pile()
 {
+    // should never affect anything set by parse_line_lite()
     pile.clear();
     indels.clear();
 }

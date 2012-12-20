@@ -85,17 +85,16 @@ inline bool isBaseForward(uchar_t c) {
     switch (c) {
         case 'A': case 'C': case 'G': case 'T': case 'N':
             return true; break;
-        default: 
+        case 'a': case 'c': case 'g': case 't': case 'n':
             return false; break;
+        default: 
+            std::cerr << "unrecognized base: '" << c << "'" << std::endl;
+            return false; break;
+            
     }
 }
 inline bool isBaseReverse(uchar_t c) {
-    switch (c) {
-        case 'a': case 'c': case 't': case 'g': case 'n':
-            return true; break;
-        default: 
-            return false; break;
-    }
+    return(! isBaseForward(c));
 }
 inline bool isRefDirection(uchar_t c) {
     return(c == '.' or c == ',');
@@ -123,7 +122,8 @@ inline int32_t extractNumber(const std::string& s, size_t start, size_t& end) {
         for (uchar_t c = s[end]; std::isdigit(c); c = s[++end]);
     }
     if ((end - start) > max_pow10 or ! std::isdigit(s[start])) {
-        std::cerr << "extractNumber: no number or out of range " << s.substr(start, end - start + 1) << std::endl;
+        std::cerr << "extractNumber: no number or out of range " 
+            << s.substr(start, end - start + 1) << std::endl;
         return 0;
     }
     for (; start < end; ++start) ans += (powers_of_10[end - start - 1] * (s[start] - '0'));
@@ -159,22 +159,28 @@ inline std::string toLower(const std::string &s) {
 
 class Indel {
 public:
-    Indel(const int32_t sz, const std::string& sq, const size_t strat = 0, const uchar_t mq = 0);
+    Indel(const int32_t sz, 
+            const std::string& sq, 
+            const size_t strat = 0, 
+            const uchar_t mq = 0);
     Indel();
+
     ~Indel();
 
-    indel_t     type;
-    readdir_t   dir;
-    int32_t     size;
-    std::string seq;
-    size_t      stratum;
-    uchar_t     map_q;
+    indel_t                 type;
+    readdir_t               dir;
+    int32_t                 size;
+    std::string             seq;
+    size_t                  stratum;
+    uchar_t                 map_q;
 
-    void                 print(std::ostream& os = std::cerr, const std::string sep = " ") const;
-    void                 print_compact(std::ostream& os = std::cerr) const;
-    const std::string    seq_qualified() const;
+    void                    print(std::ostream& os = std::cerr, 
+                                    const std::string sep = " ") const;
+    void                    print_compact(std::ostream& os = std::cerr) const;
+    const std::string       seq_qualified() const;
 
-    friend std::ostream& operator<<(std::ostream& os, const Indel& indel);
+    friend std::ostream&    operator<<(std::ostream& os, 
+                                    const Indel& indel);
 };
 
 
@@ -193,7 +199,7 @@ public:
     readdir_t               dir;
     readstructure_t         read_str;  // TODO: infer read mapping quality from read structure
     uchar_t                 read_map_q;
-    Indel*                  indel;  // if there's an indel, this points to an element of pileup.indels[]
+    Indel *                 indel;  // if an indel, points to an element of pileup.indels[]
 };
 typedef std::vector<Stratum> Pile;
 
@@ -230,21 +236,29 @@ public:
 
     bool                    set_min_base_quality(uchar_t min_base_q);
     bool                    set_min_map_quality(uchar_t min_map_q);
-    std::vector<uchar_t>    get_map_q(const size_t start = 0, size_t end = std::numeric_limits<std::size_t>::max());
+    std::vector<uchar_t>    get_map_q(const size_t start = 0, 
+                                      size_t end = std::numeric_limits<std::size_t>::max());
 
     void                    reset_pile();
     BaseCount               base_count();
 
-    void        print(std::ostream& os = std::cerr) const;
-    void        print_pile(std::ostream& os = std::cerr, const size_t start = 0, size_t end = 0, 
-                           const std::string sep = "\t") const;
-    void        print_pile_stack(std::ostream& os = std::cerr,
-                           const size_t start = 0, size_t end = 0, const bool include_indels = false, 
-                           const std::string end_stack = "\n") const;
-    void        debug_print();
-    void        debug_print_pile(const size_t start = 0, size_t end = 0, bool stack = false);
+    void                    print(std::ostream& os = std::cerr) const;
+    void                    print_pile(std::ostream& os = std::cerr, 
+                                        const size_t start = 0, 
+                                        size_t end = 0, 
+                                        const std::string sep = "\t") const;
+    void                    print_pile_stack(std::ostream& os = std::cerr,
+                                        const size_t start = 0, 
+                                        size_t end = 0, 
+                                        const bool include_indels = false, 
+                                        const std::string end_stack = "\n") const;
+    void                    debug_print() const;
+    void                    debug_print_pile(const size_t start = 0, 
+                                        size_t end = 0, 
+                                        bool stack = false) const;
                                
-    friend std::ostream& operator<<(std::ostream& os, const Pileup& pileup);
+    friend std::ostream&    operator<<(std::ostream& os, 
+                                        const Pileup& pileup);
 
 };
 
@@ -262,54 +276,57 @@ public:
     static const std::string contact() { return "douglasgscofield@gmail.com"; }
 
 public:
-    std::ifstream       stream;  // stream we're reading from
-    std::string         filename; // filename, if one was given
-    const char          FS;      // input field separator
-    const char          RS;      // input line separator
-    size_t              NL;      // line number within pileup file
-    int                 NF;      // number of fields in current line
-    uchar_t             min_base_quality;
-    uchar_t             min_map_quality;
+    std::ifstream           stream;  // stream we're reading from
+    std::string             filename; // filename, if one was given
+    const char              FS;      // input field separator
+    const char              RS;      // input line separator
+    size_t                  NL;      // line number within pileup file
+    int                     NF;      // number of fields in current line
+    uchar_t                 min_base_quality;
+    uchar_t                 min_map_quality;
 
 public:
 
-    std::string              line;  // mpileup line we're currently working on
+    std::string             line;  // mpileup line we're currently working on
 
     std::vector<std::string> fields;  // fields of mpileup line
     enum { F_ref=0, F_pos, F_refbase, F_cov, F_base_call, F_base_q, F_map_q, F_END };
 
     std::vector<std::string> references;  // reference sequences named in the pileup
 
-    Pileup                   pileup;
+    Pileup                  pileup;
 
-    uchar_t     min_base_quality_seen;
-    uchar_t     max_base_quality_seen;
-    uchar_t     min_map_quality_seen;
-    uchar_t     max_map_quality_seen;
+    uchar_t                 min_base_quality_seen;
+    uchar_t                 max_base_quality_seen;
+    uchar_t                 min_map_quality_seen;
+    uchar_t                 max_map_quality_seen;
 
     // ctor, dtor
     PileupParser(const std::string& fname);
     PileupParser();
+
     ~PileupParser();
 
-    void        open(const std::string& fname);
-    void        close();
-    int         read_line();
-    void        parse_line();
-    void        parse_line_lite();
-    void        parse_pile();
+    void                    open(const std::string& fname);
+    void                    close();
+    int                     read_line();
+    void                    parse_line();
+    void                    parse_line_lite();
+    void                    parse_pile();
 
-    void        print(std::ostream& os = std::cerr) const;
-    void        print_lite(std::ostream& os = std::cerr, const std::string sep = "\t") const;
-    void        scan(size_t n_lines);
-    friend std::ostream& operator<<(std::ostream& os, const PileupParser& parser);
+    void                    print(std::ostream& os = std::cerr) const;
+    void                    print_lite(std::ostream& os = std::cerr, 
+                                        const std::string sep = "\t") const;
+    void                    scan(size_t n_lines = 1000);
 
-    void        update_qualities_seen();
+    void                    update_qualities_seen();
 
-    int         debug_level;
-    inline bool debug(int level) { return(debug_level >= level); }
+    int                     debug_level;
+    inline bool             debug(int level) { return(debug_level >= level); }
 
 
+    friend std::ostream&    operator<<(std::ostream& os, 
+                                        const PileupParser& parser);
 };  // class PileupParser
 
 
@@ -317,3 +334,4 @@ public:
 
 
 #endif // _PILEUPPARSER_H_
+

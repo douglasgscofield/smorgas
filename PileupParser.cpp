@@ -264,8 +264,8 @@ PileupParser::parse_pile()
             int32_t indel_size = extractNumber((*pileup.raw_base_call), j, k);
             Indel indel(indel_size, pileup.raw_base_call->substr(k, abs(indel_size)), stratum);
             pileup.indels.push_back(indel);
-            pile[stratum].indel = &pileup.indels.back();  // pointer to its new spot in indels stack
-            i = k + abs(indel_size) - 1;  // i now points to the last char of the indel sequence
+            pile[stratum].indel = &pileup.indels.back();  // new spot in indels stack
+            i = k + abs(indel_size) - 1;  // i points to last char of indel sequence
 
         } else if (c1 == '$') {
 
@@ -278,21 +278,25 @@ PileupParser::parse_pile()
         if (stratum < pileup.raw_base_quality->size()) 
             pile[stratum].base_q = (*pileup.raw_base_quality)[stratum];
         else
-            std::cerr << "NL=" << NL << " stratum=" << stratum << " exceeds length of base_q" << std::endl;
+            std::cerr << "NL=" << NL << " stratum=" << stratum 
+                << " exceeds length of base_q" << std::endl;
 
         if ((*pileup.raw_map_quality) != "") {
             if (stratum < pileup.raw_map_quality->size()) 
                 pile[stratum].map_q = (*pileup.raw_map_quality)[stratum];
             else
-                std::cerr << "NL=" << NL << " stratum=" << stratum << " exceeds length of map_q" << std::endl;
+                std::cerr << "NL=" << NL << " stratum=" << stratum 
+                    << " exceeds length of map_q" << std::endl;
             if (pile[stratum].indel)
                 pile[stratum].indel->map_q = pile[stratum].map_q;
         }
 
         if (pile[stratum].read_map_q and pile[stratum].map_q
-            and pile[stratum].map_q != pile[stratum].read_map_q)
-            std::cerr << "NL=" << NL << " stratum=" << stratum << " read_map_q != map_q: "
-                << pile[stratum].read_map_q << " vs " << pile[stratum].map_q << std::endl;
+            and pile[stratum].map_q != pile[stratum].read_map_q) {
+            std::cerr << "NL=" << NL << " stratum=" << stratum 
+                << " read_map_q != map_q: " << pile[stratum].read_map_q 
+                << " vs " << pile[stratum].map_q << std::endl;
+        }
 
         ++stratum;
         ++i;

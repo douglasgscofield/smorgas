@@ -46,6 +46,9 @@
 #include <ctype.h>
 #include <stdint.h>
 
+// read stack
+#include <deque>
+
 // #define NDEBUG  // uncomment to remove assert() code
 #include <assert.h>
 
@@ -105,6 +108,17 @@ inline bool isReadBoundary(uchar_t c) {
 inline bool isIndel(uchar_t c) {
     return(c == '+' or c == '-');
 }
+inline bool isForward(uchar_t c) {
+    switch (c) {
+        case 'A': case 'C': case 'G': case 'T': case 'N': case '.':
+            return true; break;
+        case 'a': case 'c': case 'g': case 't': case 'n': case ',':
+            return false; break;
+        default: 
+            std::cerr << "unrecognized direction: '" << c << "'" << std::endl;
+            return false; break;
+    }
+}
 
 //--------------------- utility variables and functions
 
@@ -154,6 +168,47 @@ inline std::string toLower(const std::string &s) {
 
 
 //---------------------------------------------------------------
+//--------------------- Read class and ReadStack container
+
+
+class Read {
+public:
+    Read(const size_t strat, 
+            const size_t p, 
+            const uchar_t mq = 0, 
+            const readdir_t d = RD_NONE,
+            const int16_t samp = 0,
+            const int dbg = 0);
+    Read();
+    ~Read();
+
+    size_t                  stratum;    // pileup stratum to which read belongs
+    size_t                  start_pos;  // pos of read start
+    size_t                  end_pos;    // pos of read end
+    size_t                  aligned_length; // pos of read end
+    uchar_t                 map_q;      // the mapping quality of the read
+    readdir_t               dir;        // the direction of the read
+    int16_t                 bp_gap;     // bp of gaps in read
+    int16_t                 bp_insert;  // bp of insertions in read
+    int16_t                 sample;     // sample to which the read belongs (pileup column)
+
+    int                     debug_level;
+    bool                    debug(int level) { return(debug_level >= level); }
+
+    // consider a stack for the indels seen
+
+    void                    print(std::ostream& os = std::cerr, 
+                                    const std::string sep = " ") const;
+    void                    print_compact(std::ostream& os = std::cerr) const;
+    const std::string       seq_qualified() const;
+
+    friend std::ostream&    operator<<(std::ostream& os, 
+                                    const Read& read);
+};
+typedef std::deque<Read> ReadStack;
+
+
+//---------------------------------------------------------------
 //--------------------- Indel class
 
 
@@ -182,6 +237,7 @@ public:
     friend std::ostream&    operator<<(std::ostream& os, 
                                     const Indel& indel);
 };
+typedef std::vector<Indel>  IndelVector;
 
 
 //---------------------------------------------------------------
@@ -225,7 +281,7 @@ public:
     const std::string *     raw_map_quality;  // only set if -s flag passed to samtools
     // TODO: multiple samples
     Pile                    pile;  // the pile has 1+ strata TODO: is 0 ever true?
-    std::vector<Indel>      indels;  // less space to keep them here and not in Stratum
+    IndelVector             indels;  // less space to keep them here and not in Stratum
 
     enum parsestate_t { PS_NONE=0x0, PS_lite=0x1, PS_pile=0x2, PS_all=0x3 };
     parsestate_t            parse_state;
@@ -271,7 +327,7 @@ class PileupParser {
 
 public:
     static const std::string name()    { return "PileupParser"; }
-    static const std::string version() { return "0.0.1-dev"; }
+    static const std::string version() { return "0.0.2-dev"; }
     static const std::string author()  { return "Douglas G. Scofield"; }
     static const std::string contact() { return "douglasgscofield@gmail.com"; }
 
@@ -294,6 +350,8 @@ public:
 
     std::vector<std::string> references;  // reference sequences named in the pileup
 
+    ReadStack               read_stack;
+
     Pileup                  pileup;
 
     uchar_t                 min_base_quality_seen;
@@ -313,6 +371,8 @@ public:
     void                    parse_line();
     void                    parse_line_lite();
     void                    parse_pile();
+
+    void                    print_read_stack(std::ostream& os = std::cerr) const;
 
     void                    print(std::ostream& os = std::cerr) const;
     void                    print_lite(std::ostream& os = std::cerr, 

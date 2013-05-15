@@ -140,6 +140,8 @@ PileupParser::parse_line()
     parse_line_lite();
     parse_pile();
     // here, parse_state will be (PS_lite | PS_pile) == PS_all
+    if (debug(1) && NL % 10 == 0) 
+        print_read_stack(std::cerr);
 }
 
 // parse_line_lite() should do a cursory parse of the fields and load access to them
@@ -219,6 +221,12 @@ PileupParser::parse_pile()
 
         if (c0 == '^') {  // if read start, eat it and move to next character
 
+            // read stack
+            Read new_read(stratum, pileup.pos, (*pileup.raw_base_call)[i + 1],
+                          (isForward((*pileup.raw_base_call)[i + 2]) ? RD_fwd : RD_rev));
+            read_stack.insert(read_stack.begin() + stratum, new_read);
+
+            // stratum
             pile[stratum].read_str = RS_start;
             pile[stratum].read_map_q = (*pileup.raw_base_call)[i + 1];
             i += 2;
@@ -246,6 +254,7 @@ PileupParser::parse_pile()
             case '*':
                 pile[stratum].base = '*';
                 pile[stratum].read_str = RS_gap;
+                ++read_stack[stratum].bp_gap;
                 break;
             default:
                 std::cerr << thisfunc << ": line " << NL << " stratum " << stratum
@@ -269,6 +278,12 @@ PileupParser::parse_pile()
 
         } else if (c1 == '$') {
 
+            // read stack
+            read_stack[stratum].end_pos = pileup.pos;
+            read_stack[stratum].aligned_length = read_stack[stratum].end_pos - read_stack[stratum].start_pos;
+            read_stack.erase(read_stack.begin() + stratum);
+
+            // stratum
             pile[stratum].read_str = RS_end;
             i += 1;
 
@@ -385,6 +400,14 @@ PileupParser::print_lite(std::ostream& os, const std::string sep) const
     os << filename << sep << NL << ":" << NF;
     for (size_t i = F_ref; i < F_END; ++i) os << sep << fields[i];
     os << std::endl;
+}
+
+
+void
+PileupParser::print_read_stack(std::ostream& os) const
+{
+    for (ReadStack::const_iterator i = read_stack.begin(); i != read_stack.end(); ++i)
+        os << (*i) << std::endl;
 }
 
 
@@ -537,14 +560,14 @@ Pileup::print_pile_stack(std::ostream& os, const size_t start, size_t end,
 
 
 void 
-Pileup::debug_print() 
+Pileup::debug_print() const
 { 
     print(std::cerr);
 }
 
 
 void 
-Pileup::debug_print_pile(const size_t start, size_t end, bool stack)
+Pileup::debug_print_pile(const size_t start, size_t end, bool stack) const
 {
     if (stack) print_pile_stack(std::cerr, start, end);
     else print_pile(std::cerr, start, end);
@@ -644,7 +667,7 @@ operator<<(std::ostream&os, const Indel& indel)
 void
 Indel::print(std::ostream& os, const std::string sep) const
 {
-    os << "indel" << (*this) << std::endl;
+    os << "indel" << sep << (*this) << std::endl;
 }
 
 
@@ -664,6 +687,100 @@ Indel::seq_qualified() const
     std::ostringstream qseq;
     qseq << (type > IN_ins ? "+" : "-") << (dir == RD_rev ? toLower(seq) : seq);
     return(qseq.str());
+}
+
+//
+//--------------------------------------------------------
+//--------------------------------- class Read
+
+// This holds an instance of a read description.  These are instantiated
+// as we see read starts in the input pileup, and a ReadStack of these,
+// as variable read_stack in the PileupParser class, tracks reads for all
+// strata.  ReadStack is currently a deque, this may be replaced if this
+// is too inefficient.
+//
+// stratum  : the read stratum which the read provides
+// start_pos : the starting position at which the read was declared to begin
+// end_pos  : the *open* ending position at which the read was declared to end
+// aligned_length : end_pos - start_pos
+// map_q    : mapping quality of the read as declared at read start
+// dir      : RD_NONE, RD_fwd, RD_rev as declared at read start
+// bp_gap   : bp of gaps encountered along this read (updated as pileup is read)
+// bp_insert : bp of insertions encountered along this read (updated as pileup is read)
+// sample   : sample in pileup to which this read belongs
+//
+
+Read::Read(const size_t strat, const size_t p, const uchar_t mq, const readdir_t d, 
+           const int16_t samp, const int dbg)
+    : stratum(strat),
+      start_pos(p),
+      end_pos(0),
+      aligned_length(0),
+      map_q(mq),
+      dir(d),
+      bp_gap(0),
+      bp_insert(0),
+      sample(samp), 
+      debug_level(dbg)
+{ 
+    if (debug(1)) std::cerr << "Read :: Read(...) " << (*this) << std::endl;
+}
+
+
+Read::Read()
+    : stratum(0), start_pos(0), end_pos(0), aligned_length(0), map_q(0), dir(RD_NONE),
+      bp_gap(0), bp_insert(0), sample(0), debug_level(0)
+{ 
+    if (debug(1)) std::cerr << "Read :: Read() " << (*this) << std::endl;
+}
+
+
+Read::~Read()
+{ 
+    if (debug(3)) std::cerr << "Read :: ~Read() " << (*this) << std::endl;
+}
+
+
+std::ostream& 
+operator<<(std::ostream&os, const Read& read)
+{
+    std::string sep(" ");
+    os << "@" << read.stratum << sep;
+    os << "[" << sep << read.start_pos << sep;
+    if (read.dir == PileupTools::RD_fwd) os << sep << ">" << sep;
+    else if (read.dir == PileupTools::RD_rev) os << sep << "<" << sep;
+    else if (read.dir == PileupTools::RD_NONE) os << sep << "-" << sep;
+    else os << sep << "???" << sep;
+    os << read.end_pos << sep;
+    if (read.aligned_length) 
+        os << "al:" << read.aligned_length << sep;
+    os << "mq:" << read.map_q << sep;
+    if (read.aligned_length) 
+        os << "-:" << read.bp_gap << sep;
+    if (read.aligned_length) 
+        os << "+:" << read.bp_insert << sep;
+    os << "samp:" << read.sample << sep;
+    os << "]";
+    return(os);
+}
+
+
+void
+Read::print(std::ostream& os, const std::string sep) const
+{
+    os << "read" << sep << (*this) << std::endl;
+}
+
+
+void
+Read::print_compact(std::ostream& os) const
+{
+    os << "[" << start_pos;
+    if (dir == RD_fwd) os << " > ";
+    else if (dir == RD_rev) os << " < ";
+    else if (dir == RD_NONE) os << " - ";
+    else os << " ??? ";
+    os << end_pos << "]";
 }
 
 

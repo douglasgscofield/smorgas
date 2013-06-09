@@ -2,7 +2,7 @@
 CXX=		/usr/bin/g++
 #CXX=		/opt/local/bin/gcc
 #CXXFLAGS=	-Wall -O3 -D_WITH_DEBUG 
-CXXFLAGS=	-Wall -g -D_WITH_DEBUG -fno-inline
+CXXFLAGS=	-Wall -g3 -ggdb -D_WITH_DEBUG -fno-inline
 #CXXFLAGS=	-Wall -pg -g -D_WITH_DEBUG 
 
 PROG=		smorgas

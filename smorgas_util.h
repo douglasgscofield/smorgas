@@ -1,5 +1,4 @@
-// smorgas_global.h  (c) Douglas G. Scofield, Dept. Plant Physiology, Umeå
-// University
+// smorgas_global.h (c) Douglas G. Scofield, Evolutionary Biology Centre, Uppsala University
 //
 // This file contains macros, debug-based includes, and atomic typedefs used
 // throughout smorgas.  By convention, STL headers are not included here, nor

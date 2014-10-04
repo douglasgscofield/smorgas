@@ -1,4 +1,4 @@
-// smorgas.h  (c) Douglas G. Scofield, Dept. Plant Physiology, Umeå University
+// smorgas.h (c) Douglas G. Scofield, Evolutionary Biology Centre, Uppsala University
 
 #ifndef _SMORGAS_H_
 #define _SMORGAS_H_
@@ -8,7 +8,7 @@
 #define SMORGAS_NAME    "smorgas"
 #define SMORGAS_AUTHOR  "Douglas G. Scofield"
 #define SMORGAS_CONTACT "douglasgscofield@gmail.com"
-#define SMORGAS_VERSION "0.0.1-dev"
+#define SMORGAS_VERSION "0.0.2-dev"
 #ifdef _SMORGAS_MAIN
 #define NAME "[" SMORGAS_NAME "]"
 #endif

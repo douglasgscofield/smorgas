@@ -1,4 +1,4 @@
-// PileupParser.h  (c) Douglas G. Scofield, Dept. Plant Physiology, Umeå University
+// PileupParser.h (c) Douglas G. Scofield, Evolutionary Biology Centre, Uppsala University
 //
 // A class that parses samtools (m)pileup
 //

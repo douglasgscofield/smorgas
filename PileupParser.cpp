@@ -1,4 +1,4 @@
-// smorgas.cpp  (c) Douglas G. Scofield, Dept. Plant Physiology, Umeå University
+// smorgas.cpp (c) Douglas G. Scofield, Evolutionary Biology Centre, Uppsala University
 //
 // Read pileup output and compute heterozygosity and a bunch of other things
 //
@@ -8,8 +8,6 @@
 //
 //
 // TODO
-// -x- read pileup without indels
-// -x- handle indels
 // --- base qualities (base 64) can be < 64 in vicinity of N, and ! (33) when the reference is N
 /* 
 MA_1    1098    A       15      ,,,,,,,,,,,,,,. \\\\\\Z\\\\\Y\\

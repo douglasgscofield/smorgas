@@ -1,4 +1,4 @@
-// smorgas.cpp  (c) Douglas G. Scofield, Dept. Plant Physiology, Umeå University
+// smorgas.cpp (c) Douglas G. Scofield, Evolutionary Biology Centre, Uppsala University
 //
 // Read pileup output and compute heterozygosity and a bunch of other things
 //
@@ -8,10 +8,6 @@
 //
 //
 // TODO
-// -x- read pileup without indels
-// -x- handle indels
-// -x- produce --mapping-quality report
-// -x- produce --profile output
 // --- raw heterozygosity
 // --- model-based heterozygosity
 // --- multiple pileup files
@@ -79,7 +75,7 @@ main(int argc, char* argv[]) {
 
 
 static int
-usage(bool longer = false)
+usage()
 {
     cerr << endl;
     cerr << "Usage:   " << NAME << " [options] <in.pileup>" << endl;
@@ -87,24 +83,20 @@ usage(bool longer = false)
 Digest samtools mpileup output.\n\
 \n\
 NOTE: This command is very much a work in progress.\n\
-\n";
-    if (longer) cerr << "\
 \n\
-\n";
-    cerr << "\
-Options: -i FILE | --input FILE    input file name [default is stdin].  The\n\
-                                   file name may also be specified on the\n\
-                                   command line without this opiton.\n\
-         -o FILE | --output FILE   output file name [default is stdout]\n\
-         --mapping-quality         per-position mapping quality summary, to stdout\n\
-         --profile                 convert to profile output for mlRho, to stdout\n\
-         -? | --help               longer help\n\
+Options: -i | --input FILE     input file name [default is stdin].  The\n\
+                               file name may also be specified on the\n\
+                               command line without this opiton.\n\
+         -o | --output FILE    output file name [default is stdout]\n\
+         --mapping-quality     per-position mapping quality summary, to stdout\n\
+         --profile             convert to profile output for mlRho, to stdout\n\
+         -? | -h | --help      longer help\n\
 \n";
 #ifdef _WITH_DEBUG
     cerr << "\
-         --debug INT      debug info level INT [" << opt_debug << "]\n\
-         --reads INT      only process INT reads [" << opt_reads << "]\n\
-         --progress INT   print reads processed mod INT [" << opt_progress << "]\n\
+         --debug INT           debug info level INT [" << opt_debug << "]\n\
+         --reads INT           only process INT reads [" << opt_reads << "]\n\
+         --progress INT        print progress mod INT [" << opt_progress << "] reads\n\
 \n";
 #endif
     cerr << endl;
@@ -134,9 +126,9 @@ smorgas::main_smorgas(int argc, char* argv[])
     CSimpleOpt::SOption smorgas_options[] = {
         { OPT_mappingquality,  "--mapping-quality",  SO_NONE }, 
         { OPT_profile,         "--profile",          SO_NONE }, 
-        { OPT_opt2,          "--opt2",         SO_NONE }, 
-        { OPT_opt3,          "--opt3",         SO_NONE }, 
-        { OPT_opt4,          "--opt4",         SO_NONE }, 
+        { OPT_opt2,          "--opt2",            SO_NONE }, 
+        { OPT_opt3,          "--opt3",            SO_NONE }, 
+        { OPT_opt4,          "--opt4",            SO_NONE }, 
         { OPT_input,         "-i",                SO_REQ_SEP },
         { OPT_input,         "--input",           SO_REQ_SEP },
         { OPT_output,        "-o",                SO_REQ_SEP },
@@ -148,6 +140,7 @@ smorgas::main_smorgas(int argc, char* argv[])
         { OPT_progress,      "--progress",        SO_REQ_SEP },
 #endif
         { OPT_help,          "--help",            SO_NONE },
+        { OPT_help,          "-h",                SO_NONE }, 
         { OPT_help,          "-?",                SO_NONE }, 
         SO_END_OF_OPTIONS
     };
@@ -160,7 +153,7 @@ smorgas::main_smorgas(int argc, char* argv[])
             return usage();
         }
         if (args.OptionId() == OPT_help) {
-            return usage(true);
+            return usage();
         } else if (args.OptionId() == OPT_input) {
             input_file = args.OptionArg();
         } else if (args.OptionId() == OPT_output) {

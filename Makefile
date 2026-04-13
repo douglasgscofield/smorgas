@@ -1,8 +1,8 @@
-CXX=		g++
-#CXX=		/opt/local/bin/gcc
-#CXXFLAGS=	-Wall -O3 -D_WITH_DEBUG 
-CXXFLAGS=   -Wall -D_FILE_OFFSET_BITS=64 -D_WITH_DEBUG -ggdb -g3 -fvar-tracking-assignments -fno-inline -fno-inline-small-functions -O0 -fno-eliminate-unused-debug-types
-#CXXFLAGS=	-Wall -pg -g -D_WITH_DEBUG 
+CXX  = llvm-g++ # g++
+CC   = llvm-g++ # g++
+
+CXXINCLUDEDIR =
+CXXFLAGS = $(CXXINCLUDEDIR) -D_WITH_DEBUG -D_FILE_OFFSET_BITS=64 -Wall -ggdb -g3 -O0 -fno-inline -fno-eliminate-unused-debug-types
 
 PROG=		smorgas
 

@@ -1,7 +1,9 @@
 smorgas
 =======
 
-`smorgas` eats the rich tasty treat that is `samtools mpileup` output and does a number of things with it.  The current target of `smorgas` is the assessment of variation in genome assembly projects, not for general SNP/indel/CNV calling.  Currently `smorgas` requires raw pileup with position-specific mapping quality (`-s` but neither `-g` nor `-u`).
+`smorgas` eats `samtools mpileup` output and does a number of things with it.  The current target of `smorgas` is the assessment of variation in genome assembly projects, not for general SNP/indel/CNV calling.  Currently `smorgas` requires raw pileup with position-specific mapping quality (`-s` but neither `-g` nor `-u`).
+
+
 
 **Nothing here is ready for production yet.  It may not even compile :-)**
 

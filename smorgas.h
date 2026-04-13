@@ -1,4 +1,4 @@
-// smorgas.h (c) Douglas G. Scofield, Evolutionary Biology Centre, Uppsala University
+// smorgas.h (c) 2026 Douglas G. Scofield, Evolutionary Biology Centre, Uppsala University
 
 #ifndef _SMORGAS_H_
 #define _SMORGAS_H_

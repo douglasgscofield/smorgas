@@ -9,7 +9,7 @@
 // --- implement non-samtools -s dependent read qualities by maintaining a
 //     pile-high stack of current read mapping qualities from the base call
 //     ^q digraphs... a few questions here... easy to build up stack but when
-//     a read in the middle of the pile ends, do all overhead reads drop 
+//     a read in the middle of the pile ends, do all overhead reads drop
 //     down one read?  They must...
 // --- sort out namespace issues.  this is too messy as it is.
 // --- similarly sort out enum scoping and find best practices for providing
@@ -17,15 +17,15 @@
 //     here but that is more complex than this class will ever get.
 //
 // Some terminology:
-// stratum:  the information describing a single read's contribution at a position; 
+// stratum:  the information describing a single read's contribution at a position;
 //           this includes base or indel information along with quality and mapping
 //           quality information
 // pile:     the total collection of strata at a position; the size of the pile
 //           equals the coverage (minus effects of indels, yes...?)
-// pileup:   the total information contained in a single line of pileup input; 
+// pileup:   the total information contained in a single line of pileup input;
 //           includes the reference, reference base, position, coverage along with
 //           everything describing the pile
-// position: the location (reference + position within reference) that this pileup 
+// position: the location (reference + position within reference) that this pileup
 //           describes
 
 #ifndef _PILEUPPARSER_H_
@@ -80,7 +80,7 @@ inline bool isBase(uchar_t c) {
     switch (std::toupper(c)) {
         case 'A': case 'C': case 'G': case 'T': case 'N':
             return true; break;
-        default: 
+        default:
             return false; break;
     }
 }
@@ -90,10 +90,10 @@ inline bool isBaseForward(uchar_t c) {
             return true; break;
         case 'a': case 'c': case 'g': case 't': case 'n':
             return false; break;
-        default: 
+        default:
             std::cerr << "unrecognized base: '" << c << "'" << std::endl;
             return false; break;
-            
+
     }
 }
 inline bool isBaseReverse(uchar_t c) {
@@ -114,7 +114,7 @@ inline bool isForward(uchar_t c) {
             return true; break;
         case 'a': case 'c': case 'g': case 't': case 'n': case ',':
             return false; break;
-        default: 
+        default:
             std::cerr << "unrecognized direction: '" << c << "'" << std::endl;
             return false; break;
     }
@@ -124,7 +124,7 @@ inline bool isForward(uchar_t c) {
 
 inline int32_t extractNumber(const std::string& s, size_t start, size_t& end) {
     // a bit like strtol() but with a crude check for overflow
-    int32_t powers_of_10[] = {     1,      10,      100,      1000,      10000, 
+    int32_t powers_of_10[] = {     1,      10,      100,      1000,      10000,
                               100000, 1000000, 10000000, 100000000, 1000000000};
     //size_t  max_powers_of_10 = sizeof(powers_of_10) / sizeof(int32_t);
     size_t max_pow10 = 8;  // powers from 10^0 to 10^8, missing upper range of int32_t
@@ -136,7 +136,7 @@ inline int32_t extractNumber(const std::string& s, size_t start, size_t& end) {
         for (uchar_t c = s[end]; std::isdigit(c); c = s[++end]);
     }
     if ((end - start) > max_pow10 or ! std::isdigit(s[start])) {
-        std::cerr << "extractNumber: no number or out of range " 
+        std::cerr << "extractNumber: no number or out of range "
             << s.substr(start, end - start + 1) << std::endl;
         return 0;
     }
@@ -152,7 +152,7 @@ inline std::string toUpper(const std::string &s) {
     // from http://stackoverflow.com/questions/735204/convert-a-string-in-c-to-upper-case
     std::string result;
     result.reserve(s.size());
-    std::transform(s.begin(), s.end(), std::back_inserter(result), 
+    std::transform(s.begin(), s.end(), std::back_inserter(result),
                    static_cast<int(*)(int)>(std::toupper));
     return result;
 }
@@ -161,7 +161,7 @@ inline std::string toLower(const std::string &s) {
     // from http://stackoverflow.com/questions/735204/convert-a-string-in-c-to-upper-case
     std::string result;
     result.reserve(s.size());
-    std::transform(s.begin(), s.end(), std::back_inserter(result), 
+    std::transform(s.begin(), s.end(), std::back_inserter(result),
                    static_cast<int(*)(int)>(std::tolower));
     return result;
 }
@@ -173,9 +173,9 @@ inline std::string toLower(const std::string &s) {
 
 class Read {
 public:
-    Read(const size_t strat, 
-            const size_t p, 
-            const uchar_t mq = 0, 
+    Read(const size_t strat,
+            const size_t p,
+            const uchar_t mq = 0,
             const readdir_t d = RD_NONE,
             const int16_t samp = 0,
             const int dbg = 0);
@@ -197,12 +197,12 @@ public:
 
     // consider a stack for the indels seen
 
-    void                    print(std::ostream& os = std::cerr, 
+    void                    print(std::ostream& os = std::cerr,
                                     const std::string sep = " ") const;
     void                    print_compact(std::ostream& os = std::cerr) const;
     const std::string       seq_qualified() const;
 
-    friend std::ostream&    operator<<(std::ostream& os, 
+    friend std::ostream&    operator<<(std::ostream& os,
                                     const Read& read);
 };
 typedef std::deque<Read> ReadStack;
@@ -214,9 +214,9 @@ typedef std::deque<Read> ReadStack;
 
 class Indel {
 public:
-    Indel(const int32_t sz, 
-            const std::string& sq, 
-            const size_t strat = 0, 
+    Indel(const int32_t sz,
+            const std::string& sq,
+            const size_t strat = 0,
             const uchar_t mq = 0);
     Indel();
 
@@ -229,12 +229,12 @@ public:
     size_t                  stratum;
     uchar_t                 map_q;
 
-    void                    print(std::ostream& os = std::cerr, 
+    void                    print(std::ostream& os = std::cerr,
                                     const std::string sep = " ") const;
     void                    print_compact(std::ostream& os = std::cerr) const;
     const std::string       seq_qualified() const;
 
-    friend std::ostream&    operator<<(std::ostream& os, 
+    friend std::ostream&    operator<<(std::ostream& os,
                                     const Indel& indel);
 };
 typedef std::vector<Indel>  IndelVector;
@@ -292,28 +292,28 @@ public:
 
     bool                    set_min_base_quality(uchar_t min_base_q);
     bool                    set_min_map_quality(uchar_t min_map_q);
-    std::vector<uchar_t>    get_map_q(const size_t start = 0, 
+    std::vector<uchar_t>    get_map_q(const size_t start = 0,
                                       size_t end = std::numeric_limits<std::size_t>::max());
 
     void                    reset_pile();
     BaseCount               base_count();
 
     void                    print(std::ostream& os = std::cerr) const;
-    void                    print_pile(std::ostream& os = std::cerr, 
-                                        const size_t start = 0, 
-                                        size_t end = 0, 
+    void                    print_pile(std::ostream& os = std::cerr,
+                                        const size_t start = 0,
+                                        size_t end = 0,
                                         const std::string sep = "\t") const;
     void                    print_pile_stack(std::ostream& os = std::cerr,
-                                        const size_t start = 0, 
-                                        size_t end = 0, 
-                                        const bool include_indels = false, 
+                                        const size_t start = 0,
+                                        size_t end = 0,
+                                        const bool include_indels = false,
                                         const std::string end_stack = "\n") const;
     void                    debug_print() const;
-    void                    debug_print_pile(const size_t start = 0, 
-                                        size_t end = 0, 
+    void                    debug_print_pile(const size_t start = 0,
+                                        size_t end = 0,
                                         bool stack = false) const;
-                               
-    friend std::ostream&    operator<<(std::ostream& os, 
+
+    friend std::ostream&    operator<<(std::ostream& os,
                                         const Pileup& pileup);
 
 };
@@ -375,7 +375,7 @@ public:
     void                    print_read_stack(std::ostream& os = std::cerr) const;
 
     void                    print(std::ostream& os = std::cerr) const;
-    void                    print_lite(std::ostream& os = std::cerr, 
+    void                    print_lite(std::ostream& os = std::cerr,
                                         const std::string sep = "\t") const;
     void                    scan(size_t n_lines = 1000);
 
@@ -385,7 +385,7 @@ public:
     inline bool             debug(int level) { return(debug_level >= level); }
 
 
-    friend std::ostream&    operator<<(std::ostream& os, 
+    friend std::ostream&    operator<<(std::ostream& os,
                                         const PileupParser& parser);
 };  // class PileupParser
 

@@ -9,7 +9,7 @@
 //
 // TODO
 // --- base qualities (base 64) can be < 64 in vicinity of N, and ! (33) when the reference is N
-/* 
+/*
 MA_1    1098    A       15      ,,,,,,,,,,,,,,. \\\\\\Z\\\\\Y\\
 MA_1    1099    T       15      ,,,,,,,,,,,,,,. aaaaaa`aaaa^Taa
 MA_1    1100    T       15      ,,,,,,,,,,,,,,. aaaa_aYaaaaTYaa
@@ -63,7 +63,7 @@ namespace PileupTools {
 //----------------- ctor and dtor
 
 PileupParser::PileupParser(const std::string& fname)
-    : filename(fname), FS('\t'), RS('\n'), NL(0), NF(0), 
+    : filename(fname), FS('\t'), RS('\n'), NL(0), NF(0),
       min_base_quality(0), min_map_quality(33), line(""), fields(7),
       min_base_quality_seen(0xff), max_base_quality_seen(0x00),
       min_map_quality_seen(0xff), max_map_quality_seen(0x00),
@@ -73,7 +73,7 @@ PileupParser::PileupParser(const std::string& fname)
 }
 
 PileupParser::PileupParser()
-    : filename(""), FS('\t'), RS('\n'), NL(0), NF(0), 
+    : filename(""), FS('\t'), RS('\n'), NL(0), NF(0),
       min_base_quality(0), min_map_quality(33), line(""), fields(7),
       min_base_quality_seen(0xff), max_base_quality_seen(0x00),
       min_map_quality_seen(0xff), max_map_quality_seen(0x00),
@@ -87,7 +87,7 @@ PileupParser::~PileupParser()
 
 //----------------- file handling and raw line/field reading
 
-void 
+void
 PileupParser::open(const std::string& fname)
 {
     filename = fname;
@@ -96,13 +96,13 @@ PileupParser::open(const std::string& fname)
     line = "";
 }
 
-void 
+void
 PileupParser::close()
 {
     stream.close();
 }
 
-int 
+int
 PileupParser::read_line()
 {
     NF = 0;
@@ -138,7 +138,7 @@ PileupParser::parse_line()
     parse_line_lite();
     parse_pile();
     // here, parse_state will be (PS_lite | PS_pile) == PS_all
-    if (debug(1) && NL % 10 == 0) 
+    if (debug(1) && NL % 10 == 0)
         print_read_stack(std::cerr);
 }
 
@@ -186,14 +186,14 @@ PileupParser::parse_pile()
         if (pileup.cov == 0) break;  // the base call column may still hold '*' so don't even go there
 
         if (stratum == pile.size()) {
-            std::cerr << "NL=" << NL << " i=" << i <<" stratum=" << stratum 
+            std::cerr << "NL=" << NL << " i=" << i <<" stratum=" << stratum
                 << " RESIZING pile from " << pile.size();
             pile.resize(pile.size() + 1);
             //pile.resize(pileup.cov + int(pileup.cov / 2));
             std::cerr << " to " << pile.size() << std::endl;
         }
 
-        // Each base call entry can be one of several types.  
+        // Each base call entry can be one of several types.
         // TODO: does this cover it?  Can we have IUPAC or length > 1?
         //
         // B = [ACGTN]
@@ -233,11 +233,11 @@ PileupParser::parse_pile()
         }
 
         switch (c0) { // read direction (. or ,) or base, optionally followed by $, or *
-            case '.': 
+            case '.':
                 pile[stratum].dir = RD_fwd;
                 pile[stratum].base = pileup.refbase;
                 break;
-            case ',': 
+            case ',':
                 pile[stratum].dir = RD_rev;
                 pile[stratum].base = pileup.refbase;
                 break;
@@ -288,17 +288,17 @@ PileupParser::parse_pile()
         }
 
         // after all that mess, the base and mapping quality columns are easy
-        if (stratum < pileup.raw_base_quality->size()) 
+        if (stratum < pileup.raw_base_quality->size())
             pile[stratum].base_q = (*pileup.raw_base_quality)[stratum];
         else
-            std::cerr << "NL=" << NL << " stratum=" << stratum 
+            std::cerr << "NL=" << NL << " stratum=" << stratum
                 << " exceeds length of base_q" << std::endl;
 
         if ((*pileup.raw_map_quality) != "") {
-            if (stratum < pileup.raw_map_quality->size()) 
+            if (stratum < pileup.raw_map_quality->size())
                 pile[stratum].map_q = (*pileup.raw_map_quality)[stratum];
             else
-                std::cerr << "NL=" << NL << " stratum=" << stratum 
+                std::cerr << "NL=" << NL << " stratum=" << stratum
                     << " exceeds length of map_q" << std::endl;
             if (pile[stratum].indel)
                 pile[stratum].indel->map_q = pile[stratum].map_q;
@@ -306,8 +306,8 @@ PileupParser::parse_pile()
 
         if (pile[stratum].read_map_q and pile[stratum].map_q
             and pile[stratum].map_q != pile[stratum].read_map_q) {
-            std::cerr << "NL=" << NL << " stratum=" << stratum 
-                << " read_map_q != map_q: " << pile[stratum].read_map_q 
+            std::cerr << "NL=" << NL << " stratum=" << stratum
+                << " read_map_q != map_q: " << pile[stratum].read_map_q
                 << " vs " << pile[stratum].map_q << std::endl;
         }
 
@@ -315,13 +315,13 @@ PileupParser::parse_pile()
         ++i;
     }
 
-    if (debug(2)) 
+    if (debug(2))
         std::cerr << thisfunc << ": line " << NL << " has " << stratum << " strata" << std::endl;
 
     update_qualities_seen();
-    //if (min_base_quality) 
+    //if (min_base_quality)
     //    pileup.set_min_base_quality(min_base_quality);
-    //if (min_map_quality) 
+    //if (min_map_quality)
     //    pileup.set_min_map_quality(min_map_quality);
 
     if (pile.size() != stratum) {
@@ -349,10 +349,10 @@ PileupParser::scan(size_t n_lines)
 }
 
 
-void 
+void
 PileupParser::update_qualities_seen()
 {
-    uchar_t prev_min_bq = min_base_quality_seen, prev_max_bq = max_base_quality_seen, 
+    uchar_t prev_min_bq = min_base_quality_seen, prev_max_bq = max_base_quality_seen,
             prev_min_mq = min_map_quality_seen, prev_max_mq = max_map_quality_seen;
     if (pileup.cov == 0) return;
     for (size_t i = 0; i < pileup.pile.size(); ++i) {
@@ -409,7 +409,7 @@ PileupParser::print_read_stack(std::ostream& os) const
 }
 
 
-std::ostream& 
+std::ostream&
 operator<<(std::ostream&os, const PileupParser& parser)
 {
     std::string sep(" ");
@@ -432,17 +432,17 @@ operator<<(std::ostream&os, const PileupParser& parser)
 // raw_base_quality : pointer to *unparsed* fields[5] member for base quality
 // raw_map_quality  : pointer to *unparsed* fields[6] member for mapping quality
 // pile             : vector of Stratum, describing each read contribution
-// indels           : vector of Indel, describing each declared indel 
+// indels           : vector of Indel, describing each declared indel
 // parse_state      : PS_NONE, PS_lite, PS_pile, PS_all (== PS_lite | PS_pile),
 //                    tells when the line has been read and the pileup has been
 //                    parsed
 // min_set_base_quality : set by user
 // min_set_map_quality  : set by user, defaults to samtools +33
 
-Pileup::Pileup(uchar_t min_base_qual) 
-    : ref(""), pos(0), refbase('\0'), cov(-1), 
+Pileup::Pileup(uchar_t min_base_qual)
+    : ref(""), pos(0), refbase('\0'), cov(-1),
       raw_base_call(0), raw_base_quality(0), raw_map_quality(0),
-      parse_state(PS_NONE), 
+      parse_state(PS_NONE),
       min_set_base_quality(min_base_qual), min_set_map_quality(33)
 { }
 
@@ -470,7 +470,7 @@ Pileup::base_count()
 }
 
 
-bool 
+bool
 Pileup::set_min_base_quality(uchar_t min_base_q)
 {
     if (min_base_q == 0)
@@ -486,7 +486,7 @@ Pileup::set_min_base_quality(uchar_t min_base_q)
 }
 
 
-bool 
+bool
 Pileup::set_min_map_quality(uchar_t min_map_q)
 {
     if (min_map_q == 0)
@@ -497,7 +497,7 @@ Pileup::set_min_map_quality(uchar_t min_map_q)
         if (iter->map_q < min_map_q or iter->read_map_q < min_map_q)
             good_quals = false;
         iter->map_q -= min_map_q;
-        if (iter->read_map_q) 
+        if (iter->read_map_q)
             iter->read_map_q -= min_map_q;
     }
     return good_quals;
@@ -509,13 +509,13 @@ Pileup::get_map_q(const size_t start, size_t end)
 {
     std::vector<uchar_t> ans(pile.size());
     end = std::min(end, pile.size() - 1);
-    for (size_t i = start; i <= end; ++i) 
+    for (size_t i = start; i <= end; ++i)
         ans[i] = pile[i].map_q;
     return ans;
 }
-   
 
-void 
+
+void
 Pileup::print(std::ostream& os) const
 {
     os << (*this) << std::endl;
@@ -526,7 +526,7 @@ void
 Pileup::print_pile(std::ostream& os, const size_t start, size_t end, const std::string sep) const
 {
     if (pile.size() == 0) {
-        os << "NO_PILE"; 
+        os << "NO_PILE";
     } else {
         print_pile_stack(os, start, end, true, sep);
     }
@@ -534,11 +534,11 @@ Pileup::print_pile(std::ostream& os, const size_t start, size_t end, const std::
 
 
 void
-Pileup::print_pile_stack(std::ostream& os, const size_t start, size_t end, 
+Pileup::print_pile_stack(std::ostream& os, const size_t start, size_t end,
                          const bool include_indels, const std::string end_stack) const
 {
     if (pile.size() == 0) {
-        os << "NO_PILE" << end_stack; 
+        os << "NO_PILE" << end_stack;
     } else {
         end = std::min(std::max(end, start), pile.size() - 1);
         size_t i;
@@ -557,23 +557,23 @@ Pileup::print_pile_stack(std::ostream& os, const size_t start, size_t end,
 }
 
 
-void 
+void
 Pileup::debug_print() const
-{ 
+{
     print(std::cerr);
 }
 
 
-void 
+void
 Pileup::debug_print_pile(const size_t start, size_t end, bool stack) const
 {
     if (stack) print_pile_stack(std::cerr, start, end);
     else print_pile(std::cerr, start, end);
 }
-         
 
 
-std::ostream& 
+
+std::ostream&
 operator<<(std::ostream& os, const Pileup& pileup)
 {
     std::string sep(" ");
@@ -604,7 +604,7 @@ operator<<(std::ostream& os, const Pileup& pileup)
 // read_map_q  : mapping quality, samtools convention is Phred+33s (TODO: other mappers?)
 // indel       : pointer to class Indel instance if there's an indel declared here
 
-Stratum::Stratum() 
+Stratum::Stratum()
     : base('\0'), base_q('\0'), map_q('\0'), dir(RD_NONE), read_str(RS_NONE),
       read_map_q('\0'), indel(0)
 { }
@@ -648,7 +648,7 @@ Indel::~Indel()
 { }
 
 
-std::ostream& 
+std::ostream&
 operator<<(std::ostream&os, const Indel& indel)
 {
     std::string sep(" ");
@@ -656,7 +656,7 @@ operator<<(std::ostream&os, const Indel& indel)
     if (indel.type == PileupTools::IN_NONE)
         os << "0!!!)";
     else
-        os << (indel.dir == PileupTools::RD_fwd ? "." : ",") << sep << indel.size 
+        os << (indel.dir == PileupTools::RD_fwd ? "." : ",") << sep << indel.size
             << sep << indel.seq_qualified() << ")";
     return(os);
 }
@@ -708,7 +708,7 @@ Indel::seq_qualified() const
 // sample   : sample in pileup to which this read belongs
 //
 
-Read::Read(const size_t strat, const size_t p, const uchar_t mq, const readdir_t d, 
+Read::Read(const size_t strat, const size_t p, const uchar_t mq, const readdir_t d,
            const int16_t samp, const int dbg)
     : stratum(strat),
       start_pos(p),
@@ -718,9 +718,9 @@ Read::Read(const size_t strat, const size_t p, const uchar_t mq, const readdir_t
       dir(d),
       bp_gap(0),
       bp_insert(0),
-      sample(samp), 
+      sample(samp),
       debug_level(dbg)
-{ 
+{
     if (debug(1)) std::cerr << "Read :: Read(...) " << (*this) << std::endl;
 }
 
@@ -728,18 +728,18 @@ Read::Read(const size_t strat, const size_t p, const uchar_t mq, const readdir_t
 Read::Read()
     : stratum(0), start_pos(0), end_pos(0), aligned_length(0), map_q(0), dir(RD_NONE),
       bp_gap(0), bp_insert(0), sample(0), debug_level(0)
-{ 
+{
     if (debug(1)) std::cerr << "Read :: Read() " << (*this) << std::endl;
 }
 
 
 Read::~Read()
-{ 
+{
     if (debug(3)) std::cerr << "Read :: ~Read() " << (*this) << std::endl;
 }
 
 
-std::ostream& 
+std::ostream&
 operator<<(std::ostream&os, const Read& read)
 {
     std::string sep(" ");
@@ -750,12 +750,12 @@ operator<<(std::ostream&os, const Read& read)
     else if (read.dir == PileupTools::RD_NONE) os << sep << "-" << sep;
     else os << sep << "???" << sep;
     os << read.end_pos << sep;
-    if (read.aligned_length) 
+    if (read.aligned_length)
         os << "al:" << read.aligned_length << sep;
     os << "mq:" << read.map_q << sep;
-    if (read.aligned_length) 
+    if (read.aligned_length)
         os << "-:" << read.bp_gap << sep;
-    if (read.aligned_length) 
+    if (read.aligned_length)
         os << "+:" << read.bp_insert << sep;
     os << "samp:" << read.sample << sep;
     os << "]";

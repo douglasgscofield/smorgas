@@ -1,4 +1,4 @@
-// smorgas.cpp (c) Douglas G. Scofield, Evolutionary Biology Centre, Uppsala University
+// smorgas.cpp (c) 2026 Douglas G. Scofield, Evolutionary Biology Centre, Uppsala University
 //
 // Read pileup output and compute heterozygosity and a bunch of other things
 //
@@ -8,6 +8,10 @@
 //
 //
 // TODO
+// -x- read pileup without indels
+// -x- handle indels
+// -x- produce --mapping-quality report
+// -x- produce --profile output
 // --- raw heterozygosity
 // --- model-based heterozygosity
 // --- multiple pileup files
@@ -64,7 +68,7 @@ static const string sep = "\t";
 
 
 #ifdef _STANDALONE
-int 
+int
 main(int argc, char* argv[]) {
     return main_smorgas(argc, argv);
 }
@@ -75,7 +79,7 @@ main(int argc, char* argv[]) {
 
 
 static int
-usage()
+usage(bool longer = false)
 {
     cerr << endl;
     cerr << "Usage:   " << NAME << " [options] <in.pileup>" << endl;
@@ -83,20 +87,24 @@ usage()
 Digest samtools mpileup output.\n\
 \n\
 NOTE: This command is very much a work in progress.\n\
+\n";
+    if (longer) cerr << "\
 \n\
-Options: -i | --input FILE     input file name [default is stdin].  The\n\
-                               file name may also be specified on the\n\
-                               command line without this opiton.\n\
-         -o | --output FILE    output file name [default is stdout]\n\
-         --mapping-quality     per-position mapping quality summary, to stdout\n\
-         --profile             convert to profile output for mlRho, to stdout\n\
-         -? | -h | --help      longer help\n\
+\n";
+    cerr << "\
+Options: -i FILE | --input FILE    input file name [default is stdin].  The\n\
+                                   file name may also be specified on the\n\
+                                   command line without this opiton.\n\
+         -o FILE | --output FILE   output file name [default is stdout]\n\
+         --mapping-quality         per-position mapping quality summary, to stdout\n\
+         --profile                 convert to profile output for mlRho, to stdout\n\
+         -? | --help               longer help\n\
 \n";
 #ifdef _WITH_DEBUG
     cerr << "\
-         --debug INT           debug info level INT [" << opt_debug << "]\n\
-         --reads INT           only process INT reads [" << opt_reads << "]\n\
-         --progress INT        print progress mod INT [" << opt_progress << "] reads\n\
+         --debug INT      debug info level INT [" << opt_debug << "]\n\
+         --reads INT      only process INT reads [" << opt_reads << "]\n\
+         --progress INT   print reads processed mod INT [" << opt_progress << "]\n\
 \n";
 #endif
     cerr << endl;
@@ -108,7 +116,7 @@ Options: -i | --input FILE     input file name [default is stdin].  The\n\
 //-------------------------------------
 
 
-int 
+int
 smorgas::main_smorgas(int argc, char* argv[])
 {
 
@@ -124,24 +132,24 @@ smorgas::main_smorgas(int argc, char* argv[])
         OPT_help };
 
     CSimpleOpt::SOption smorgas_options[] = {
-        { OPT_mappingquality,  "--mapping-quality",  SO_NONE }, 
-        { OPT_profile,         "--profile",          SO_NONE }, 
-        { OPT_opt2,          "--opt2",            SO_NONE }, 
-        { OPT_opt3,          "--opt3",            SO_NONE }, 
-        { OPT_opt4,          "--opt4",            SO_NONE }, 
-        { OPT_input,         "-i",                SO_REQ_SEP },
-        { OPT_input,         "--input",           SO_REQ_SEP },
-        { OPT_output,        "-o",                SO_REQ_SEP },
-        { OPT_output,        "--output",          SO_REQ_SEP },
-        { OPT_stdio,         "-",                 SO_NONE }, 
+        { OPT_mappingquality,  "--mapping-quality",  SO_NONE },
+        { OPT_profile,         "--profile",          SO_NONE },
+        { OPT_opt2,            "--opt2",             SO_NONE },
+        { OPT_opt3,            "--opt3",             SO_NONE },
+        { OPT_opt4,            "--opt4",             SO_NONE },
+        { OPT_input,           "-i",                 SO_REQ_SEP },
+        { OPT_input,           "--input",            SO_REQ_SEP },
+        { OPT_output,          "-o",                 SO_REQ_SEP },
+        { OPT_output,          "--output",           SO_REQ_SEP },
+        { OPT_stdio,           "-",                  SO_NONE },
 #ifdef _WITH_DEBUG
-        { OPT_debug,         "--debug",           SO_REQ_SEP },
-        { OPT_reads,         "--reads",           SO_REQ_SEP },
-        { OPT_progress,      "--progress",        SO_REQ_SEP },
+        { OPT_debug,           "--debug",            SO_REQ_SEP },
+        { OPT_reads,           "--reads",            SO_REQ_SEP },
+        { OPT_progress,        "--progress",         SO_REQ_SEP },
 #endif
-        { OPT_help,          "--help",            SO_NONE },
-        { OPT_help,          "-h",                SO_NONE }, 
-        { OPT_help,          "-?",                SO_NONE }, 
+        { OPT_help,            "--help",             SO_NONE },
+        { OPT_help,            "-h",                 SO_NONE },
+        { OPT_help,            "-?",                 SO_NONE },
         SO_END_OF_OPTIONS
     };
 
@@ -153,7 +161,7 @@ smorgas::main_smorgas(int argc, char* argv[])
             return usage();
         }
         if (args.OptionId() == OPT_help) {
-            return usage();
+            return usage(true);
         } else if (args.OptionId() == OPT_input) {
             input_file = args.OptionArg();
         } else if (args.OptionId() == OPT_output) {
@@ -178,8 +186,10 @@ smorgas::main_smorgas(int argc, char* argv[])
         }
     }
 
+#ifdef _WITH_DEBUG
     if (DEBUG(1) and ! opt_progress)
         opt_progress = debug_progress;
+#endif
 
     if (input_file.empty()) {
         if (args.FileCount() > 1) {
@@ -218,7 +228,7 @@ smorgas::main_smorgas(int argc, char* argv[])
             cout << " map_q=[" << uint16_t(min_map_q) << "," << uint16_t(max_map_q) << "]";
             cout << " cov=" << parser.pileup.cov;
             size_t n_map_max = 0; uchar_t high_map_q = 58;
-            for (size_t i = 0; i < map_q.size(); ++i) 
+            for (size_t i = 0; i < map_q.size(); ++i)
                 if (map_q[i] >= high_map_q) ++n_map_max;
             cout << " cov_hiqh_q=" << n_map_max;
             cout << " frac=" << (parser.pileup.cov ? (float(n_map_max) / parser.pileup.cov) : 0);
@@ -273,7 +283,7 @@ smorgas::main_smorgas(int argc, char* argv[])
         }
     }
 
-    //cout << "range base qual seen:\t" << PRINT_UCHAR(parser.min_base_quality_seen) << "\t" 
+    //cout << "range base qual seen:\t" << PRINT_UCHAR(parser.min_base_quality_seen) << "\t"
     //    << PRINT_UCHAR(parser.max_base_quality_seen) << endl;
     //cout << "range map qual seen:\t" << PRINT_UCHAR(parser.min_map_quality_seen) << "\t"
     //    << PRINT_UCHAR(parser.max_map_quality_seen) << endl;

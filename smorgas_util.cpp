@@ -1,4 +1,4 @@
-// smorgas_util.cpp (c) Douglas G. Scofield, Evolutionary Biology Centre, Uppsala University
+// smorgas_util.cpp (c) 2026 Douglas G. Scofield, Evolutionary Biology Centre, Uppsala University
 //
 // Utility routines for smorgas
 //
